@@ -765,4 +765,43 @@ const healthScoreConfigRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-      const [existing] =
+      const [existing] = await db
+        .select()
+        .from(healthScoreConfigs)
+        .where(and(eq(healthScoreConfigs.id, input.id), eq(healthScoreConfigs.userId, ctx.user.id)))
+        .limit(1);
+
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
+      }
+
+      await db
+        .delete(healthScoreConfigs)
+        .where(eq(healthScoreConfigs.id, input.id));
+
+      return { success: true };
+    }),
+});
+
+export const appRouter = router({
+  auth: router({
+    me: publicProcedure.query(({ ctx }) => ctx.user ?? null),
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      ctx.resHeaders.append("Set-Cookie", "session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax");
+      return { ok: true };
+    }),
+  }),
+  payments: paymentsRouter,
+  customers: customersRouter,
+  healthScores: healthScoresRouter,
+  events: eventsRouter,
+  churnPredictions: churnPredictionsRouter,
+  playbooks: playbooksRouter,
+  segments: segmentsRouter,
+  alerts: alertsRouter,
+  integrations: integrationsRouter,
+  analytics: analyticsRouter,
+  healthScoreConfigs: healthScoreConfigsRouter,
+});
+
+export type AppRouter = typeof appRouter;
