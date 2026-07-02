@@ -338,8 +338,7 @@ export const integrations = pgTable("integrations", {
   accessToken: text("accessToken"),
   refreshToken: text("refreshToken"),
   tokenExpiresAt: timestamp("tokenExpiresAt"),
-  apiKey: varchar("apiKey", { length:
-255 }).notNull().default(""),
+  apiKey: varchar("apiKey", { length: 255 }).notNull().default(""),
   metadata: text("metadata"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
