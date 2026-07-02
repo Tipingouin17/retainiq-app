@@ -339,3 +339,23 @@ export const integrations = pgTable("integrations", {
   refreshToken: text("refreshToken"),
   tokenExpiresAt: timestamp("tokenExpiresAt"),
   apiKey: varchar("apiKey", { length:
+255 }).notNull().default(""),
+  metadata: text("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── Health Score Configs ─────────────────────────────────────────────────────
+export const healthScoreConfigs = pgTable("health_score_configs", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  weights: text("weights").notNull().default("{}"),
+  isDefault: boolean("isDefault").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── Type exports ─────────────────────────────────────────────────────────────
+export type Integration = typeof integrations.$inferSelect;
+export type HealthScoreConfig = typeof healthScoreConfigs.$inferSelect;
