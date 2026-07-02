@@ -1,15 +1,13 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useState } from "react";
 import {
@@ -19,66 +17,57 @@ import {
   Activity,
   Plus,
   RefreshCw,
+  ArrowUpRight,
+  ArrowDownRight,
   CheckCircle2,
   XCircle,
   Clock,
-  ArrowUpRight,
-  ArrowDownRight,
-  BookOpen,
-  Bell,
   Zap,
-  ChevronRight,
-  BarChart2,
+  Bell,
+  BarChart3,
+  ShieldCheck,
 } from "lucide-react";
 
 function StatCardSkeleton() {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <Skeleton className="h-4 w-24" />
-      </CardHeader>
-      <CardContent>
-        <Skeleton className="h-8 w-16 mb-2" />
-        <Skeleton className="h-3 w-32" />
-      </CardContent>
+    <Card className="p-4 md:p-6">
+      <Skeleton className="h-4 w-24 mb-2" />
+      <Skeleton className="h-8 w-16 mb-1" />
+      <Skeleton className="h-3 w-32" />
     </Card>
   );
 }
 
 function CustomerRowSkeleton() {
   return (
-    <div className="flex items-center justify-between p-3 border-b last:border-0">
-      <div className="flex items-center gap-3">
-        <Skeleton className="h-9 w-9 rounded-full" />
-        <div>
-          <Skeleton className="h-4 w-28 mb-1" />
-          <Skeleton className="h-3 w-20" />
-        </div>
+    <div className="flex items-center gap-3 p-3 border-b last:border-0">
+      <Skeleton className="h-9 w-9 rounded-full flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <Skeleton className="h-4 w-32 mb-1" />
+        <Skeleton className="h-3 w-24" />
       </div>
-      <div className="flex items-center gap-2">
-        <Skeleton className="h-6 w-16 rounded-full" />
-        <Skeleton className="h-6 w-12" />
-      </div>
+      <Skeleton className="h-6 w-16 rounded-full" />
+      <Skeleton className="h-6 w-12" />
     </div>
   );
 }
 
 function getHealthColor(status: string) {
   switch (status) {
-    case "healthy": return "bg-emerald-100 text-emerald-800 border-emerald-200";
-    case "at_risk": return "bg-amber-100 text-amber-800 border-amber-200";
-    case "critical": return "bg-red-100 text-red-800 border-red-200";
-    case "churned": return "bg-gray-100 text-gray-800 border-gray-200";
-    default: return "bg-gray-100 text-gray-800 border-gray-200";
+    case "healthy": return "bg-emerald-100 text-emerald-700 border-emerald-200";
+    case "at_risk": return "bg-amber-100 text-amber-700 border-amber-200";
+    case "critical": return "bg-red-100 text-red-700 border-red-200";
+    case "churned": return "bg-gray-100 text-gray-600 border-gray-200";
+    default: return "bg-gray-100 text-gray-600 border-gray-200";
   }
 }
 
-function getChurnColor(risk: string) {
-  switch (risk) {
+function getChurnColor(level: string) {
+  switch (level) {
     case "low": return "text-emerald-600";
     case "medium": return "text-amber-600";
     case "high": return "text-orange-600";
-    case "critical": return "text-red-600";
+    case "very_high": return "text-red-600";
     default: return "text-gray-600";
   }
 }
@@ -90,113 +79,105 @@ function getScoreColor(score: number) {
   return "bg-red-500";
 }
 
-function getPlaybookStatusColor(status: string) {
-  switch (status) {
-    case "active": return "bg-emerald-100 text-emerald-800 border-emerald-200";
-    case "draft": return "bg-blue-100 text-blue-800 border-blue-200";
-    case "paused": return "bg-amber-100 text-amber-800 border-amber-200";
-    case "archived": return "bg-gray-100 text-gray-800 border-gray-200";
-    default: return "bg-gray-100 text-gray-800 border-gray-200";
-  }
+function AlertSeverityIcon({ severity }: { severity: string }) {
+  if (severity === "high") return <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />;
+  if (severity === "medium") return <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />;
+  return <Bell className="h-4 w-4 text-blue-500 flex-shrink-0" />;
 }
 
 export default function Dashboard() {
   const { user, loading } = useAuth();
-  const utils = trpc.useUtils();
 
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
-  const [addPlaybookOpen, setAddPlaybookOpen] = useState(false);
-
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
   const [newCustomerCompany, setNewCustomerCompany] = useState("");
-  const [newCustomerMrr, setNewCustomerMrr] = useState("");
+  const [newCustomerMRR, setNewCustomerMRR] = useState("");
   const [newCustomerPlan, setNewCustomerPlan] = useState("");
-
-  const [newPlaybookName, setNewPlaybookName] = useState("");
-  const [newPlaybookDescription, setNewPlaybookDescription] = useState("");
-  const [newPlaybookTrigger, setNewPlaybookTrigger] = useState("");
+  const [formError, setFormError] = useState("");
 
   const {
-    data: customersData,
+    data: customers,
     isLoading: customersLoading,
     error: customersError,
+    refetch: refetchCustomers,
   } = trpc.customers.list.useQuery(undefined, { enabled: !!user });
 
   const {
-    data: playbooksData,
-    isLoading: playbooksLoading,
-    error: playbooksError,
-  } = trpc.playbooks.list.useQuery(undefined, { enabled: !!user });
-
-  const {
-    data: alertsData,
+    data: alerts,
     isLoading: alertsLoading,
     error: alertsError,
+    refetch: refetchAlerts,
   } = trpc.alerts.list.useQuery(undefined, { enabled: !!user });
 
   const {
-    data: statsData,
-    isLoading: statsLoading,
-    error: statsError,
-  } = trpc.dashboard.stats.useQuery(undefined, { enabled: !!user });
+    data: playbooks,
+    isLoading: playbooksLoading,
+  } = trpc.playbooks.list.useQuery(undefined, { enabled: !!user });
+
+  const {
+    data: tasks,
+    isLoading: tasksLoading,
+  } = trpc.tasks.list.useQuery(undefined, { enabled: !!user });
+
+  const utils = trpc.useUtils();
 
   const createCustomerMutation = trpc.customers.create.useMutation({
     onSuccess: () => {
       utils.customers.list.invalidate();
-      utils.dashboard.stats.invalidate();
       setAddCustomerOpen(false);
       setNewCustomerName("");
       setNewCustomerEmail("");
       setNewCustomerCompany("");
-      setNewCustomerMrr("");
+      setNewCustomerMRR("");
       setNewCustomerPlan("");
+      setFormError("");
+    },
+    onError: (err) => {
+      setFormError(err.message || "Failed to create customer.");
     },
   });
 
-  const createPlaybookMutation = trpc.playbooks.create.useMutation({
+  const dismissAlertMutation = trpc.alerts.dismiss.useMutation({
     onSuccess: () => {
-      utils.playbooks.list.invalidate();
-      setAddPlaybookOpen(false);
-      setNewPlaybookName("");
-      setNewPlaybookDescription("");
-      setNewPlaybookTrigger("");
+      utils.alerts.list.invalidate();
     },
   });
 
-  const handleCreateCustomer = () => {
-    if (!newCustomerName.trim() || !newCustomerEmail.trim()) return;
+  function handleCreateCustomer() {
+    setFormError("");
+    if (!newCustomerName.trim()) { setFormError("Customer name is required."); return; }
+    if (!newCustomerEmail.trim()) { setFormError("Email is required."); return; }
     createCustomerMutation.mutate({
       name: newCustomerName.trim(),
       email: newCustomerEmail.trim(),
       companyName: newCustomerCompany.trim() || undefined,
-      mrr: newCustomerMrr ? newCustomerMrr : "0",
-      planName: newCustomerPlan || undefined,
+      mrr: newCustomerMRR ? newCustomerMRR : "0",
+      planName: newCustomerPlan.trim() || undefined,
     });
-  };
+  }
 
-  const handleCreatePlaybook = () => {
-    if (!newPlaybookName.trim() || !newPlaybookTrigger) return;
-    createPlaybookMutation.mutate({
-      name: newPlaybookName.trim(),
-      description: newPlaybookDescription.trim() || undefined,
-      triggerType: newPlaybookTrigger,
-      triggerConditions: JSON.stringify({ type: newPlaybookTrigger }),
-    });
-  };
+  const totalCustomers = customers?.length ?? 0;
+  const activeCustomers = customers?.filter((c) => c.isActive).length ?? 0;
+  const atRiskCustomers = customers?.filter((c) => c.healthStatus === "at_risk" || c.healthStatus === "critical").length ?? 0;
+  const totalMRR = customers?.reduce((sum, c) => sum + parseFloat(String(c.mrr ?? "0")), 0) ?? 0;
+  const mrrAtRisk = customers
+    ?.filter((c) => c.healthStatus === "at_risk" || c.healthStatus === "critical")
+    .reduce((sum, c) => sum + parseFloat(String(c.mrr ?? "0")), 0) ?? 0;
+  const unreadAlerts = alerts?.filter((a) => !a.isRead && !a.isDismissed).length ?? 0;
+  const activePlaybooks = playbooks?.filter((p) => p.status === "active").length ?? 0;
+  const openTasks = tasks?.filter((t) => t.status === "open" || t.status === "in_progress").length ?? 0;
+  const avgHealthScore = customers && customers.length > 0
+    ? Math.round(customers.reduce((sum, c) => sum + (c.healthScore ?? 100), 0) / customers.length)
+    : 0;
 
-  const totalCustomers = statsData?.totalCustomers ?? 0;
-  const atRiskCustomers = statsData?.atRiskCustomers ?? 0;
-  const activePlaybooks = statsData?.activePlaybooks ?? 0;
-  const avgHealthScore = statsData?.avgHealthScore ?? 0;
-  const totalMrr = statsData?.totalMrr ?? "0";
-  const unreadAlerts = alertsData?.filter((a: any) => !a.isRead).length ?? 0;
+  const recentAtRisk = customers
+    ?.filter((c) => c.healthStatus === "at_risk" || c.healthStatus === "critical")
+    .slice(0, 6) ?? [];
 
-  const recentCustomers = (customersData ?? []).slice(0, 8);
-  const recentPlaybooks = (playbooksData ?? []).slice(0, 5);
-  const recentAlerts = (alertsData ?? []).slice(0, 5);
-
-  const statsHasError = statsError || customersError;
+  const visibleAlerts = alerts
+    ?.filter((a) => !a.isDismissed)
+    .slice(0, 5) ?? [];
 
   return (
     <DashboardLayout>
@@ -205,131 +186,111 @@ export default function Dashboard() {
         {/* Welcome Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100">
               Welcome back{user?.firstName ? `, ${user.firstName}` : ""}! 👋
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Here's what's happening with your customer retention today.
+            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+              Here's your retention overview for today.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-10 px-4"
-              onClick={() => {
-                utils.customers.list.invalidate();
-                utils.playbooks.list.invalidate();
-                utils.alerts.list.invalidate();
-                utils.dashboard.stats.invalidate();
-              }}
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
-            <Dialog open={addCustomerOpen} onOpenChange={setAddCustomerOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" className="h-10 px-4">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Customer
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Add New Customer</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="customer-name">Full Name <span className="text-red-500">*</span></Label>
+          <Dialog open={addCustomerOpen} onOpenChange={setAddCustomerOpen}>
+            <DialogTrigger asChild>
+              <Button className="h-10 px-4 self-start sm:self-auto">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Customer
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add New Customer</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                {formError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{formError}</AlertDescription>
+                  </Alert>
+                )}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Customer Name <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    placeholder="Jane Smith"
+                    value={newCustomerName}
+                    onChange={(e) => setNewCustomerName(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Email <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="email"
+                    placeholder="jane@acme.com"
+                    value={newCustomerEmail}
+                    onChange={(e) => setNewCustomerEmail(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Company</label>
+                  <Input
+                    placeholder="Acme Corp"
+                    value={newCustomerCompany}
+                    onChange={(e) => setNewCustomerCompany(e.target.value)}
+                    className="h-10"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">MRR ($)</label>
                     <Input
-                      id="customer-name"
-                      placeholder="Jane Smith"
-                      value={newCustomerName}
-                      onChange={(e) => setNewCustomerName(e.target.value)}
+                      type="number"
+                      placeholder="500"
+                      value={newCustomerMRR}
+                      onChange={(e) => setNewCustomerMRR(e.target.value)}
+                      className="h-10"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="customer-email">Email <span className="text-red-500">*</span></Label>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Plan</label>
                     <Input
-                      id="customer-email"
-                      type="email"
-                      placeholder="jane@company.com"
-                      value={newCustomerEmail}
-                      onChange={(e) => setNewCustomerEmail(e.target.value)}
+                      placeholder="Growth"
+                      value={newCustomerPlan}
+                      onChange={(e) => setNewCustomerPlan(e.target.value)}
+                      className="h-10"
                     />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="customer-company">Company Name</Label>
-                    <Input
-                      id="customer-company"
-                      placeholder="Acme Corp"
-                      value={newCustomerCompany}
-                      onChange={(e) => setNewCustomerCompany(e.target.value)}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label htmlFor="customer-mrr">MRR ($)</Label>
-                      <Input
-                        id="customer-mrr"
-                        type="number"
-                        placeholder="299"
-                        value={newCustomerMrr}
-                        onChange={(e) => setNewCustomerMrr(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="customer-plan">Plan</Label>
-                      <Select value={newCustomerPlan} onValueChange={setNewCustomerPlan}>
-                        <SelectTrigger id="customer-plan">
-                          <SelectValue placeholder="Select plan" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="starter">Starter</SelectItem>
-                          <SelectItem value="growth">Growth</SelectItem>
-                          <SelectItem value="pro">Pro</SelectItem>
-                          <SelectItem value="enterprise">Enterprise</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
                   </div>
                 </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setAddCustomerOpen(false)} className="h-10 px-4">
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-10"
+                    onClick={() => { setAddCustomerOpen(false); setFormError(""); }}
+                  >
                     Cancel
                   </Button>
                   <Button
+                    className="flex-1 h-10"
                     onClick={handleCreateCustomer}
-                    disabled={!newCustomerName.trim() || !newCustomerEmail.trim() || createCustomerMutation.isPending}
-                    className="h-10 px-4"
+                    disabled={createCustomerMutation.isPending}
                   >
                     {createCustomerMutation.isPending ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Adding...
-                      </>
+                      <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Creating...</>
                     ) : (
-                      "Add Customer"
+                      "Create Customer"
                     )}
                   </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
-        {/* Stats Error */}
-        {statsHasError && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              Failed to load dashboard data. Please refresh the page and try again.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Stats Grid */}
+        {/* Stats Overview */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {statsLoading ? (
+          {customersLoading ? (
             <>
               <StatCardSkeleton />
               <StatCardSkeleton />
@@ -338,359 +299,325 @@ export default function Dashboard() {
             </>
           ) : (
             <>
-              <Card className="relative overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <Users className="h-4 w-4 text-blue-500" />
-                    Total Customers
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">{totalCustomers}</div>
-                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                    <ArrowUpRight className="h-3 w-3 text-emerald-500" />
-                    Active accounts tracked
-                  </p>
-                </CardContent>
-                <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50 dark:bg-blue-950 rounded-bl-full opacity-60" />
-              </Card>
-
-              <Card className="relative overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
-                    At-Risk
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl md:text-3xl font-bold text-amber-600">{atRiskCustomers}</div>
-                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                    <ArrowDownRight className="h-3 w-3 text-red-500" />
-                    Need intervention
-                  </p>
-                </CardContent>
-                <div className="absolute top-0 right-0 w-16 h-16 bg-amber-50 dark:bg-amber-950 rounded-bl-full opacity-60" />
-              </Card>
-
-              <Card className="relative overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-indigo-500" />
-                    Avg Health Score
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">{avgHealthScore}</div>
-                  <div className="mt-2">
-                    <Progress value={avgHealthScore} className="h-1.5" />
+              <Card className="p-4 md:p-5 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 font-medium">Total Customers</p>
+                    <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">{activeCustomers}</p>
+                    <p className="text-xs text-gray-400 mt-1">{totalCustomers} total tracked</p>
                   </div>
-                </CardContent>
-                <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-50 dark:bg-indigo-950 rounded-bl-full opacity-60" />
+                  <div className="h-9 w-9 rounded-lg bg-blue-50 dark:bg-blue-950 flex items-center justify-center flex-shrink-0">
+                    <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                </div>
               </Card>
 
-              <Card className="relative overflow-hidden">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <BarChart2 className="h-4 w-4 text-emerald-500" />
-                    Total MRR
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
-                    ${Number(totalMrr).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              <Card className="p-4 md:p-5 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 font-medium">MRR Tracked</p>
+                    <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                      ${totalMRR >= 1000 ? `${(totalMRR / 1000).toFixed(1)}K` : totalMRR.toFixed(0)}
+                    </p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className="text-xs text-red-500 font-medium flex items-center gap-0.5">
+                        <ArrowDownRight className="h-3 w-3" />
+                        ${mrrAtRisk >= 1000 ? `${(mrrAtRisk / 1000).toFixed(1)}K` : mrrAtRisk.toFixed(0)} at risk
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                    <ArrowUpRight className="h-3 w-3 text-emerald-500" />
-                    Monthly recurring revenue
-                  </p>
-                </CardContent>
-                <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-50 dark:bg-emerald-950 rounded-bl-full opacity-60" />
+                  <div className="h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950 flex items-center justify-center flex-shrink-0">
+                    <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-4 md:p-5 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 font-medium">At-Risk Customers</p>
+                    <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">{atRiskCustomers}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      {atRiskCustomers > 0 ? (
+                        <span className="text-xs text-amber-600 font-medium flex items-center gap-0.5">
+                          <AlertTriangle className="h-3 w-3" />
+                          Needs attention
+                        </span>
+                      ) : (
+                        <span className="text-xs text-emerald-600 font-medium flex items-center gap-0.5">
+                          <CheckCircle2 className="h-3 w-3" />
+                          All healthy
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="h-9 w-9 rounded-lg bg-amber-50 dark:bg-amber-950 flex items-center justify-center flex-shrink-0">
+                    <TrendingDown className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-4 md:p-5 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 font-medium">Avg Health Score</p>
+                    <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">{avgHealthScore}</p>
+                    <div className="mt-2 w-full">
+                      <Progress
+                        value={avgHealthScore}
+                        className="h-1.5"
+                      />
+                    </div>
+                  </div>
+                  <div className="h-9 w-9 rounded-lg bg-purple-50 dark:bg-purple-950 flex items-center justify-center flex-shrink-0">
+                    <ShieldCheck className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                </div>
               </Card>
             </>
           )}
         </div>
 
-        {/* Main Content Grid */}
+        {/* Secondary Stats Row */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {playbooksLoading || tasksLoading || alertsLoading ? (
+            <>
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </>
+          ) : (
+            <>
+              <Card className="p-4 border border-gray-200 dark:border-gray-700 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center flex-shrink-0">
+                  <Zap className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Active Playbooks</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{activePlaybooks}</p>
+                </div>
+              </Card>
+              <Card className="p-4 border border-gray-200 dark:border-gray-700 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-orange-50 dark:bg-orange-950 flex items-center justify-center flex-shrink-0">
+                  <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Open Tasks</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{openTasks}</p>
+                </div>
+              </Card>
+              <Card className="p-4 border border-gray-200 dark:border-gray-700 flex items-center gap-3 col-span-2 md:col-span-1">
+                <div className="h-9 w-9 rounded-lg bg-rose-50 dark:bg-rose-950 flex items-center justify-center flex-shrink-0">
+                  <Bell className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Unread Alerts</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{unreadAlerts}</p>
+                </div>
+              </Card>
+            </>
+          )}
+        </div>
+
+        {/* Main Content: At-Risk Customers + Alerts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          {/* Customers Table */}
+          {/* At-Risk Customers */}
           <div className="lg:col-span-2">
-            <Card>
-              <CardHeader className="pb-3">
+            <Card className="border border-gray-200 dark:border-gray-700 h-full">
+              <CardHeader className="pb-3 px-4 md:px-6">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base md:text-lg">Recent Customers</CardTitle>
-                    <CardDescription className="text-xs mt-0.5">Latest accounts and their health status</CardDescription>
-                  </div>
-                  <Button variant="ghost" size="sm" className="h-9 px-3 text-xs text-muted-foreground" asChild>
-                    <a href="/dashboard/health">
-                      View all <ChevronRight className="h-3 w-3 ml-1" />
-                    </a>
+                  <CardTitle className="text-base md:text-lg font-semibold flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-gray-500" />
+                    At-Risk Customers
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-3 text-xs text-gray-500"
+                    onClick={() => refetchCustomers()}
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Refresh
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="p-0">
-                {customersLoading ? (
-                  <div>
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <CustomerRowSkeleton key={i} />
-                    ))}
+              <CardContent className="px-4 md:px-6 pb-4">
+                {customersError ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      {customersError.message || "Failed to load customers. Please try again."}
+                    </AlertDescription>
+                  </Alert>
+                ) : customersLoading ? (
+                  <div className="space-y-1">
+                    {[...Array(5)].map((_, i) => <CustomerRowSkeleton key={i} />)}
                   </div>
-                ) : customersError ? (
-                  <div className="p-4">
-                    <Alert variant="destructive">
-                      <AlertDescription>Failed to load customers. Please try again.</AlertDescription>
-                    </Alert>
-                  </div>
-                ) : recentCustomers.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                    <div className="rounded-full bg-blue-50 dark:bg-blue-950 p-4 mb-4">
-                      <Users className="h-8 w-8 text-blue-500" />
-                    </div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white mb-1">No customers yet</h3>
-                    <p className="text-sm text-muted-foreground mb-4 max-w-xs">
-                      Add your first customer to start tracking their health and churn risk.
+                ) : recentAtRisk.length === 0 ? (
+                  <div className="text-center py-10">
+                    <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto mb-3" />
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      No at-risk customers
+                    </h3>
+                    <p className="text-xs text-gray-400 mb-4">
+                      All your customers are healthy right now. Keep it up!
                     </p>
-                    <Button
-                      onClick={() => setAddCustomerOpen(true)}
-                      size="sm"
-                      className="h-10 px-4"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add First Customer
-                    </Button>
+                    {totalCustomers === 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 px-4"
+                        onClick={() => setAddCustomerOpen(true)}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Your First Customer
+                      </Button>
+                    )}
                   </div>
                 ) : (
-                  <div className="divide-y">
-                    {recentCustomers.map((customer: any) => (
+                  <div className="space-y-0 divide-y divide-gray-100 dark:divide-gray-800">
+                    {recentAtRisk.map((customer) => (
                       <div
                         key={customer.id}
-                        className="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                        className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 -mx-1 px-1 rounded-lg transition-colors cursor-pointer"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
-                            {customer.name?.charAt(0)?.toUpperCase() ?? "?"}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                              {customer.name}
-                            </p>
-                            <p className="text-xs text-muted-foreground truncate">
-                              {customer.companyName || customer.email}
-                            </p>
-                          </div>
+                        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 text-white text-sm font-semibold">
+                          {customer.name.charAt(0).toUpperCase()}
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                          <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getHealthColor(customer.healthStatus)}`}>
-                            {customer.healthStatus?.replace("_", " ")}
-                          </span>
-                          <div className="text-right">
-                            <p className="text-xs font-medium text-gray-900 dark:text-white">
-                              {customer.healthScore ?? 0}
-                              <span className="text-muted-foreground font-normal">/100</span>
-                            </p>
-                            <p className={`text-xs font-medium ${getChurnColor(customer.churnRisk)}`}>
-                              {customer.churnRisk} risk
-                            </p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                            {customer.name}
+                          </p>
+                          <p className="text-xs text-gray-400 truncate">
+                            {customer.companyName || customer.email}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="hidden sm:flex flex-col items-end">
+                            <div className="flex items-center gap-1 mb-1">
+                              <div className={`h-2 w-2 rounded-full ${getScoreColor(customer.healthScore)}`} />
+                              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                                {customer.healthScore}
+                              </span>
+                            </div>
+                            <span className={`text-xs font-medium ${getChurnColor(customer.churnRiskLevel)}`}>
+                              {customer.churnRiskLevel.replace("_", " ")} risk
+                            </span>
                           </div>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs border ${getHealthColor(customer.healthStatus)} whitespace-nowrap`}
+                          >
+                            {customer.healthStatus.replace("_", " ")}
+                          </Badge>
+                          {customer.mrr && parseFloat(String(customer.mrr)) > 0 && (
+                            <span className="hidden md:block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                              ${parseFloat(String(customer.mrr)).toFixed(0)}/mo
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {!customersLoading && !customersError && customers && customers.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 px-3 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 w-full"
+                      onClick={() => window.location.href = "/dashboard/health"}
+                    >
+                      View All Customers
+                      <ArrowUpRight className="h-3 w-3 ml-1" />
+                    </Button>
                   </div>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Right Column */}
-          <div className="space-y-4">
-
-            {/* Recent Alerts */}
-            <Card>
-              <CardHeader className="pb-3">
+          {/* Alerts Panel */}
+          <div className="lg:col-span-1">
+            <Card className="border border-gray-200 dark:border-gray-700 h-full">
+              <CardHeader className="pb-3 px-4 md:px-6">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-base">Alerts</CardTitle>
+                  <CardTitle className="text-base md:text-lg font-semibold flex items-center gap-2">
+                    <Bell className="h-5 w-5 text-gray-500" />
+                    Recent Alerts
                     {unreadAlerts > 0 && (
-                      <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-red-500 text-white text-xs font-bold">
+                      <span className="inline-flex items-center justify-center h-5 min-w-5 px-1.5 text-xs font-bold bg-red-500 text-white rounded-full">
                         {unreadAlerts}
                       </span>
                     )}
-                  </div>
-                  <Bell className="h-4 w-4 text-muted-foreground" />
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-3 text-xs text-gray-500"
+                    onClick={() => refetchAlerts()}
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                  </Button>
                 </div>
               </CardHeader>
-              <CardContent className="p-0">
-                {alertsLoading ? (
-                  <div className="p-3 space-y-3">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className="space-y-1">
-                        <Skeleton className="h-4 w-full" />
-                        <Skeleton className="h-3 w-3/4" />
+              <CardContent className="px-4 md:px-6 pb-4">
+                {alertsError ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      {alertsError.message || "Failed to load alerts."}
+                    </AlertDescription>
+                  </Alert>
+                ) : alertsLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="flex gap-2">
+                        <Skeleton className="h-4 w-4 rounded-full flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <Skeleton className="h-3 w-full mb-1" />
+                          <Skeleton className="h-3 w-3/4" />
+                        </div>
                       </div>
                     ))}
                   </div>
-                ) : alertsError ? (
-                  <div className="p-3">
-                    <Alert variant="destructive">
-                      <AlertDescription className="text-xs">Failed to load alerts.</AlertDescription>
-                    </Alert>
-                  </div>
-                ) : recentAlerts.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-                    <CheckCircle2 className="h-8 w-8 text-emerald-500 mb-2" />
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">All clear!</p>
-                    <p className="text-xs text-muted-foreground mt-1">No active alerts right now.</p>
+                ) : visibleAlerts.length === 0 ? (
+                  <div className="text-center py-8">
+                    <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500 dark:text-gray-400">No active alerts</p>
+                    <p className="text-xs text-gray-400 mt-1">You're all caught up!</p>
                   </div>
                 ) : (
-                  <div className="divide-y">
-                    {recentAlerts.map((alert: any) => (
-                      <div key={alert.id} className={`p-3 ${!alert.isRead ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}`}>
+                  <div className="space-y-0 divide-y divide-gray-100 dark:divide-gray-800">
+                    {visibleAlerts.map((alert) => (
+                      <div
+                        key={alert.id}
+                        className={`py-3 first:pt-0 last:pb-0 ${!alert.isRead ? "opacity-100" : "opacity-70"}`}
+                      >
                         <div className="flex items-start gap-2">
-                          <div className={`mt-0.5 h-2 w-2 rounded-full flex-shrink-0 ${
-                            alert.severity === "high" || alert.severity === "critical"
-                              ? "bg-red-500"
-                              : alert.severity === "medium"
-                              ? "bg-amber-500"
-                              : "bg-blue-500"
-                          }`} />
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{alert.title}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{alert.message}</p>
+                          <AlertSeverityIcon severity={alert.severity} />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs font-medium text-gray-800 dark:text-gray-200 leading-snug ${!alert.isRead ? "font-semibold" : ""}`}>
+                              {alert.title}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5 line-clamp-2 leading-relaxed">
+                              {alert.message}
+                            </p>
+                            <div className="flex items-center justify-between mt-1.5">
+                              <span className="text-xs text-gray-400">
+                                {new Date(alert.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs text-gray-400 hover:text-gray-600"
+                                onClick={() => dismissAlertMutation.mutate({ id: alert.id })}
+                              >
+                                Dismiss
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Active Playbooks */}
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base">Playbooks</CardTitle>
-                    <CardDescription className="text-xs mt-0.5">{activePlaybooks} active</CardDescription>
-                  </div>
-                  <Dialog open={addPlaybookOpen} onOpenChange={setAddPlaybookOpen}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-8 px-3">
-                        <Plus className="h-3 w-3 mr-1" />
-                        New
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-md">
-                      <DialogHeader>
-                        <DialogTitle>Create Retention Playbook</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4 py-2">
-                        <div className="space-y-1">
-                          <Label htmlFor="playbook-name">Playbook Name <span className="text-red-500">*</span></Label>
-                          <Input
-                            id="playbook-name"
-                            placeholder="e.g. Re-engage Inactive Users"
-                            value={newPlaybookName}
-                            onChange={(e) => setNewPlaybookName(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="playbook-desc">Description</Label>
-                          <Input
-                            id="playbook-desc"
-                            placeholder="What does this playbook do?"
-                            value={newPlaybookDescription}
-                            onChange={(e) => setNewPlaybookDescription(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="playbook-trigger">Trigger <span className="text-red-500">*</span></Label>
-                          <Select value={newPlaybookTrigger} onValueChange={setNewPlaybookTrigger}>
-                            <SelectTrigger id="playbook-trigger">
-                              <SelectValue placeholder="Select trigger type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="health_score_drop">Health Score Drop</SelectItem>
-                              <SelectItem value="churn_risk_high">High Churn Risk</SelectItem>
-                              <SelectItem value="inactivity">User Inactivity</SelectItem>
-                              <SelectItem value="trial_ending">Trial Ending</SelectItem>
-                              <SelectItem value="renewal_approaching">Renewal Approaching</SelectItem>
-                              <SelectItem value="manual">Manual Trigger</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button variant="outline" onClick={() => setAddPlaybookOpen(false)} className="h-10 px-4">
-                          Cancel
-                        </Button>
-                        <Button
-                          onClick={handleCreatePlaybook}
-                          disabled={!newPlaybookName.trim() || !newPlaybookTrigger || createPlaybookMutation.isPending}
-                          className="h-10 px-4"
-                        >
-                          {createPlaybookMutation.isPending ? (
-                            <>
-                              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                              Creating...
-                            </>
-                          ) : (
-                            "Create Playbook"
-                          )}
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                {playbooksLoading ? (
-                  <div className="p-3 space-y-3">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className="flex items-center justify-between">
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-5 w-14 rounded-full" />
-                      </div>
-                    ))}
-                  </div>
-                ) : playbooksError ? (
-                  <div className="p-3">
-                    <Alert variant="destructive">
-                      <AlertDescription className="text-xs">Failed to load playbooks.</AlertDescription>
-                    </Alert>
-                  </div>
-                ) : recentPlaybooks.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-                    <div className="rounded-full bg-indigo-50 dark:bg-indigo-950 p-3 mb-3">
-                      <BookOpen className="h-6 w-6 text-indigo-500" />
-                    </div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">No playbooks yet</p>
-                    <p className="text-xs text-muted-foreground mt-1 mb-3">
-                      Create automated retention workflows.
-                    </p>
-                    <Button
-                      onClick={() => setAddPlaybookOpen(true)}
-                      size="sm"
-                      className="h-9 px-3"
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      Create Playbook
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="divide-y">
-                    {recentPlaybooks.map((playbook: any) => (
-                      <div key={playbook.id} className="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{playbook.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {playbook.timesTriggered ?? 0} runs
-                          </p>
-                        </div>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border flex-shrink-0 ml-2 ${getPlaybookStatusColor(playbook.status)}`}>
-                          {playbook.status}
-                        </span>
                       </div>
                     ))}
                   </div>
@@ -701,99 +628,216 @@ export default function Dashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Card className="hover:shadow-md transition-shadow cursor-pointer group" onClick={() => window.location.href = "/dashboard/health"}>
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className="rounded-xl bg-blue-100 dark:bg-blue-950 p-3 group-hover:bg-blue-200 dark:group-hover:bg-blue-900 transition-colors">
-                  <Activity className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Customer Health</p>
-                  <p className="text-xs text-muted-foreground">View health scores & trends</p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto group-hover:translate-x-1 transition-transform" />
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-md transition-shadow cursor-pointer group" onClick={() => window.location.href = "/dashboard/churn"}>
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className="rounded-xl bg-red-100 dark:bg-red-950 p-3 group-hover:bg-red-200 dark:group-hover:bg-red-900 transition-colors">
-                  <TrendingDown className="h-5 w-5 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Churn Prediction</p>
-                  <p className="text-xs text-muted-foreground">AI-powered churn forecasting</p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto group-hover:translate-x-1 transition-transform" />
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-md transition-shadow cursor-pointer group" onClick={() => setAddPlaybookOpen(true)}>
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className="rounded-xl bg-emerald-100 dark:bg-emerald-950 p-3 group-hover:bg-emerald-200 dark:group-hover:bg-emerald-900 transition-colors">
-                  <Zap className="h-5 w-5 text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">New Playbook</p>
-                  <p className="text-xs text-muted-foreground">Automate retention workflows</p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto group-hover:translate-x-1 transition-transform" />
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Health Score Distribution */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base md:text-lg">Customer Health Distribution</CardTitle>
-            <CardDescription>Breakdown of customers by health status</CardDescription>
+        <Card className="border border-gray-200 dark:border-gray-700">
+          <CardHeader className="pb-3 px-4 md:px-6">
+            <CardTitle className="text-base md:text-lg font-semibold">Quick Actions</CardTitle>
           </CardHeader>
-          <CardContent>
-            {customersLoading ? (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="space-y-2">
-                    <Skeleton className="h-16 w-full rounded-lg" />
-                    <Skeleton className="h-3 w-16" />
-                  </div>
-                ))}
+          <CardContent className="px-4 md:px-6 pb-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Button
+                variant="outline"
+                className="h-auto py-4 flex flex-col items-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-950 hover:border-blue-200 dark:hover:border-blue-800 transition-colors group"
+                onClick={() => setAddCustomerOpen(true)}
+              >
+                <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center group-hover:bg-blue-200 dark:group-hover:bg-blue-800 transition-colors">
+                  <Plus className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Add Customer</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                className="h-auto py-4 flex flex-col items-center gap-2 hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:border-indigo-200 dark:hover:border-indigo-800 transition-colors group"
+                onClick={() => window.location.href = "/dashboard/playbooks"}
+              >
+                <div className="h-9 w-9 rounded-lg bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center group-hover:bg-indigo-200 dark:group-hover:bg-indigo-800 transition-colors">
+                  <Zap className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">New Playbook</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                className="h-auto py-4 flex flex-col items-center gap-2 hover:bg-amber-50 dark:hover:bg-amber-950 hover:border-amber-200 dark:hover:border-amber-800 transition-colors group"
+                onClick={() => window.location.href = "/dashboard/churn"}
+              >
+                <div className="h-9 w-9 rounded-lg bg-amber-100 dark:bg-amber-900 flex items-center justify-center group-hover:bg-amber-200 dark:group-hover:bg-amber-800 transition-colors">
+                  <TrendingDown className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Churn Report</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                className="h-auto py-4 flex flex-col items-center gap-2 hover:bg-emerald-50 dark:hover:bg-emerald-950 hover:border-emerald-200 dark:hover:border-emerald-800 transition-colors group"
+                onClick={() => window.location.href = "/dashboard/health"}
+              >
+                <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center group-hover:bg-emerald-200 dark:group-hover:bg-emerald-800 transition-colors">
+                  <Activity className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Health Scores</span>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* All Customers Table */}
+        <Card className="border border-gray-200 dark:border-gray-700">
+          <CardHeader className="pb-3 px-4 md:px-6">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="text-base md:text-lg font-semibold flex items-center gap-2">
+                <Users className="h-5 w-5 text-gray-500" />
+                All Customers
+                {!customersLoading && customers && (
+                  <Badge variant="secondary" className="text-xs font-normal">
+                    {customers.length}
+                  </Badge>
+                )}
+              </CardTitle>
+              <Button
+                size="sm"
+                className="h-9 px-4 text-xs"
+                onClick={() => setAddCustomerOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                Add Customer
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="px-0 pb-0">
+            {customersError ? (
+              <div className="px-4 md:px-6 pb-4">
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    {customersError.message || "Failed to load customers. Please try again."}
+                  </AlertDescription>
+                </Alert>
               </div>
-            ) : customersError ? (
-              <Alert variant="destructive">
-                <AlertDescription>Failed to load health distribution data.</AlertDescription>
-              </Alert>
+            ) : customersLoading ? (
+              <div className="px-4 md:px-6">
+                {[...Array(6)].map((_, i) => <CustomerRowSkeleton key={i} />)}
+              </div>
+            ) : !customers || customers.length === 0 ? (
+              <div className="text-center py-16 px-4">
+                <div className="h-16 w-16 rounded-2xl bg-blue-50 dark:bg-blue-950 flex items-center justify-center mx-auto mb-4">
+                  <Users className="h-8 w-8 text-blue-500" />
+                </div>
+                <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-2">
+                  No customers yet
+                </h3>
+                <p className="text-sm text-gray-400 mb-6 max-w-xs mx-auto">
+                  Add your first customer to start tracking health scores and predicting churn.
+                </p>
+                <Button
+                  className="h-10 px-6"
+                  onClick={() => setAddCustomerOpen(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Your First Customer
+                </Button>
+              </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { status: "healthy", label: "Healthy", icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950", border: "border-emerald-200 dark:border-emerald-800" },
-                  { status: "at_risk", label: "At Risk", icon: AlertTriangle, color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-950", border: "border-amber-200 dark:border-amber-800" },
-                  { status: "critical", label: "Critical", icon: XCircle, color: "text-red-500", bg: "bg-red-50 dark:bg-red-950", border: "border-red-200 dark:border-red-800" },
-                  { status: "churned", label: "Churned", icon: Clock, color: "text-gray-500", bg: "bg-gray-50 dark:bg-gray-950", border: "border-gray-200 dark:border-gray-700" },
-                ].map(({ status, label, icon: Icon, color, bg, border }) => {
-                  const count = (customersData ?? []).filter((c: any) => c.healthStatus === status).length;
-                  const pct = totalCustomers > 0 ? Math.round((count / totalCustomers) * 100) : 0;
-                  return (
-                    <div key={status} className={`rounded-xl border p-4 ${bg} ${border}`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Icon className={`h-4 w-4 ${color}`} />
-                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{label}</span>
-                      </div>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{count}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{pct}% of total</p>
-                      <div className="mt-2">
-                        <Progress value={pct} className="h-1" />
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+                      <th className="text-left px-4 md:px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Customer
+                      </th>
+                      <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell">
+                        Plan
+                      </th>
+                      <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden sm:table-cell">
+                        MRR
+                      </th>
+                      <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Health
+                      </th>
+                      <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden lg:table-cell">
+                        Score
+                      </th>
+                      <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden lg:table-cell">
+                        Churn Risk
+                      </th>
+                      <th className="text-right px-4 md:px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell">
+                        Last Active
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customers.map((customer) => (
+                      <tr
+                        key={customer.id}
+                        className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors cursor-pointer"
+                      >
+                        <td className="px-4 md:px-6 py-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 text-white text-xs font-semibold">
+                              {customer.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-gray-900 dark:text-gray-100 truncate text-sm">
+                                {customer.name}
+                              </p>
+                              <p className="text-xs text-gray-400 truncate">
+                                {customer.email}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 hidden md:table-cell">
+                          <span className="text-xs text-gray-600 dark:text-gray-400">
+                            {customer.planName || "—"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 hidden sm:table-cell">
+                          <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                            {customer.mrr && parseFloat(String(customer.mrr)) > 0
+                              ? `$${parseFloat(String(customer.mrr)).toFixed(0)}`
+                              : "—"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <Badge
+                            variant="outline"
+                            className={`text-xs border ${getHealthColor(customer.healthStatus)}`}
+                          >
+                            {customer.healthStatus.replace("_", " ")}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-3 hidden lg:table-cell">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 flex-shrink-0">
+                              <div
+                                className={`h-1.5 rounded-full ${getScoreColor(customer.healthScore)}`}
+                                style={{ width: `${Math.min(100, Math.max(0, customer.healthScore))}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-medium text-gray-600 dark:text-gray-400 flex-shrink-0">
+                              {customer.healthScore}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 hidden lg:table-cell">
+                          <span className={`text-xs font-medium capitalize ${getChurnColor(customer.churnRiskLevel)}`}>
+                            {customer.churnRiskLevel.replace("_", " ")}
+                          </span>
+                        </td>
+                        <td className="px-4 md:px-6 py-3 text-right hidden md:table-cell">
+                          <span className="text-xs text-gray-400">
+                            {customer.lastActivityAt
+                              ? new Date(customer.lastActivityAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                              : "Never"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </CardContent>
         </Card>
-
       </div>
     </DashboardLayout>
   );

@@ -1,45 +1,49 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "../drizzle/schema";
-import { eq, and, desc, asc, lt, gte, lte, isNull, isNotNull, sql } from "drizzle-orm";
+import { eq, and, desc, asc, lt, gte, lte, isNull, or, sql } from "drizzle-orm";
 import {
   users,
   subscriptions,
   customers,
-  customerHealthScores,
+  healthScoreConfigs,
+  healthScoreHistory,
   customerEvents,
-  churnPredictions,
+  features,
+  customerFeatureUsage,
   playbooks,
   playbookSteps,
-  playbookRuns,
+  playbookExecutions,
   playbookStepExecutions,
-  customerSegments,
-  customerSegmentMemberships,
+  tasks,
   alerts,
+  integrations,
 } from "../drizzle/schema";
 import type {
   Subscription,
   NewSubscription,
   Customer,
   NewCustomer,
-  CustomerHealthScore,
-  NewCustomerHealthScore,
+  HealthScoreConfig,
+  NewHealthScoreConfig,
+  HealthScoreHistory,
+  NewHealthScoreHistory,
   CustomerEvent,
   NewCustomerEvent,
-  ChurnPrediction,
-  NewChurnPrediction,
+  Feature,
+  NewFeature,
+  CustomerFeatureUsage,
+  NewCustomerFeatureUsage,
   Playbook,
   NewPlaybook,
   PlaybookStep,
   NewPlaybookStep,
-  PlaybookRun,
-  NewPlaybookRun,
+  PlaybookExecution,
+  NewPlaybookExecution,
   PlaybookStepExecution,
   NewPlaybookStepExecution,
-  CustomerSegment,
-  NewCustomerSegment,
-  CustomerSegmentMembership,
-  NewCustomerSegmentMembership,
+  Task,
+  NewTask,
   Alert,
   NewAlert,
 } from "../drizzle/schema";
@@ -59,62 +63,35 @@ export async function getDb() {
   return db;
 }
 
-export async function upsertUser(data: {
-  openId: string;
-  email: string;
-  name?: string;
-  avatarUrl?: string;
-}): Promise<typeof users.$inferSelect> {
+// ─── Core User Functions (DO NOT MODIFY) ─────────────────────────────────────
+
+export async function upsertUser(clerkId: string, email: string, name: string, avatarUrl?: string) {
   const db = await getDb();
-  const existing = await db
-    .select()
-    .from(users)
-    .where(eq(users.openId, data.openId))
-    .limit(1);
-
+  const existing = await db.select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
   if (existing.length > 0) {
-    const [updated] = await db
+    const updated = await db
       .update(users)
-      .set({
-        email: data.email,
-        name: data.name ?? existing[0].name,
-        avatarUrl: data.avatarUrl ?? existing[0].avatarUrl,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.openId, data.openId))
+      .set({ email, name, avatarUrl, updatedAt: new Date() })
+      .where(eq(users.clerkId, clerkId))
       .returning();
-    return updated;
+    return updated[0];
   }
-
-  const [created] = await db
+  const inserted = await db
     .insert(users)
-    .values({
-      openId: data.openId,
-      email: data.email,
-      name: data.name,
-      avatarUrl: data.avatarUrl,
-    })
+    .values({ clerkId, email, name, avatarUrl })
     .returning();
-  return created;
+  return inserted[0];
 }
 
-export async function getUserByOpenId(
-  openId: string
-): Promise<typeof users.$inferSelect | null> {
+export async function getUserByOpenId(clerkId: string) {
   const db = await getDb();
-  const result = await db
-    .select()
-    .from(users)
-    .where(eq(users.openId, openId))
-    .limit(1);
+  const result = await db.select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
   return result[0] ?? null;
 }
 
-// ─── Subscription Helpers ────────────────────────────────────────────────────
+// ─── Subscription Helpers ─────────────────────────────────────────────────────
 
-export async function getSubscriptionByUserId(
-  userId: number
-): Promise<Subscription | null> {
+export async function getSubscriptionByUserId(userId: number): Promise<Subscription | null> {
   const db = await getDb();
   const result = await db
     .select()
@@ -125,9 +102,7 @@ export async function getSubscriptionByUserId(
   return result[0] ?? null;
 }
 
-export async function getSubscriptionByStripeCustomerId(
-  stripeCustomerId: string
-): Promise<Subscription | null> {
+export async function getSubscriptionByStripeCustomerId(stripeCustomerId: string): Promise<Subscription | null> {
   const db = await getDb();
   const result = await db
     .select()
@@ -137,9 +112,7 @@ export async function getSubscriptionByStripeCustomerId(
   return result[0] ?? null;
 }
 
-export async function getSubscriptionByStripeSubscriptionId(
-  stripeSubscriptionId: string
-): Promise<Subscription | null> {
+export async function getSubscriptionByStripeSubscriptionId(stripeSubscriptionId: string): Promise<Subscription | null> {
   const db = await getDb();
   const result = await db
     .select()
@@ -149,77 +122,58 @@ export async function getSubscriptionByStripeSubscriptionId(
   return result[0] ?? null;
 }
 
-export async function createSubscription(
-  data: NewSubscription
-): Promise<Subscription> {
+export async function createSubscription(data: NewSubscription): Promise<Subscription> {
   const db = await getDb();
-  const [created] = await db.insert(subscriptions).values(data).returning();
-  return created;
+  const result = await db.insert(subscriptions).values(data).returning();
+  return result[0];
 }
 
 export async function updateSubscription(
   id: number,
   data: Partial<Omit<Subscription, "id" | "createdAt">>
-): Promise<Subscription> {
+): Promise<Subscription | null> {
   const db = await getDb();
-  const [updated] = await db
+  const result = await db
     .update(subscriptions)
     .set({ ...data, updatedAt: new Date() })
     .where(eq(subscriptions.id, id))
     .returning();
-  return updated;
+  return result[0] ?? null;
 }
 
 export async function upsertSubscriptionByUserId(
   userId: number,
-  data: Omit<NewSubscription, "userId">
+  data: Partial<NewSubscription>
 ): Promise<Subscription> {
   const db = await getDb();
   const existing = await getSubscriptionByUserId(userId);
   if (existing) {
-    return updateSubscription(existing.id, data);
+    const updated = await db
+      .update(subscriptions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(subscriptions.id, existing.id))
+      .returning();
+    return updated[0];
   }
-  return createSubscription({ ...data, userId });
+  const inserted = await db
+    .insert(subscriptions)
+    .values({ userId, ...data } as NewSubscription)
+    .returning();
+  return inserted[0];
 }
 
-// ─── Customer Helpers ────────────────────────────────────────────────────────
+// ─── Customer Helpers ─────────────────────────────────────────────────────────
 
-export async function getCustomersByUserId(
-  userId: number,
-  options?: {
-    limit?: number;
-    offset?: number;
-    healthStatus?: "healthy" | "at_risk" | "critical" | "churned";
-    churnRisk?: "low" | "medium" | "high" | "critical";
-    isChurned?: boolean;
-  }
-): Promise<Customer[]> {
+export async function getCustomersByUserId(userId: number): Promise<Customer[]> {
   const db = await getDb();
-  const conditions = [eq(customers.userId, userId)];
-
-  if (options?.healthStatus !== undefined) {
-    conditions.push(eq(customers.healthStatus, options.healthStatus));
-  }
-  if (options?.churnRisk !== undefined) {
-    conditions.push(eq(customers.churnRisk, options.churnRisk));
-  }
-  if (options?.isChurned !== undefined) {
-    conditions.push(eq(customers.isChurned, options.isChurned));
-  }
-
   return db
     .select()
     .from(customers)
-    .where(and(...conditions))
-    .orderBy(desc(customers.createdAt))
-    .limit(options?.limit ?? 100)
-    .offset(options?.offset ?? 0);
+    .where(and(eq(customers.userId, userId), eq(customers.isActive, true)))
+    .orderBy(desc(customers.createdAt));
 }
 
-export async function getCustomerById(
-  id: number,
-  userId: number
-): Promise<Customer | null> {
+export async function getCustomerById(id: number, userId: number): Promise<Customer | null> {
   const db = await getDb();
   const result = await db
     .select()
@@ -229,10 +183,17 @@ export async function getCustomerById(
   return result[0] ?? null;
 }
 
-export async function getCustomerByEmail(
-  email: string,
-  userId: number
-): Promise<Customer | null> {
+export async function getCustomerByExternalId(externalId: string, userId: number): Promise<Customer | null> {
+  const db = await getDb();
+  const result = await db
+    .select()
+    .from(customers)
+    .where(and(eq(customers.externalId, externalId), eq(customers.userId, userId)))
+    .limit(1);
+  return result[0] ?? null;
+}
+
+export async function getCustomerByEmail(email: string, userId: number): Promise<Customer | null> {
   const db = await getDb();
   const result = await db
     .select()
@@ -242,58 +203,34 @@ export async function getCustomerByEmail(
   return result[0] ?? null;
 }
 
-export async function getCustomerByExternalId(
-  externalId: string,
-  userId: number
-): Promise<Customer | null> {
-  const db = await getDb();
-  const result = await db
-    .select()
-    .from(customers)
-    .where(
-      and(eq(customers.externalId, externalId), eq(customers.userId, userId))
-    )
-    .limit(1);
-  return result[0] ?? null;
-}
-
 export async function createCustomer(data: NewCustomer): Promise<Customer> {
   const db = await getDb();
-  const [created] = await db.insert(customers).values(data).returning();
-  return created;
+  const result = await db.insert(customers).values(data).returning();
+  return result[0];
 }
 
 export async function updateCustomer(
   id: number,
   userId: number,
-  data: Partial<Omit<Customer, "id" | "createdAt">>
-): Promise<Customer> {
+  data: Partial<Omit<Customer, "id" | "userId" | "createdAt">>
+): Promise<Customer | null> {
   const db = await getDb();
-  const [updated] = await db
+  const result = await db
     .update(customers)
     .set({ ...data, updatedAt: new Date() })
     .where(and(eq(customers.id, id), eq(customers.userId, userId)))
     .returning();
-  return updated;
+  return result[0] ?? null;
 }
 
-export async function deleteCustomer(
-  id: number,
-  userId: number
-): Promise<void> {
-  const db = await getDb();
-  await db
-    .delete(customers)
-    .where(and(eq(customers.id, id), eq(customers.userId, userId)));
-}
-
-export async function getCustomerCount(userId: number): Promise<number> {
+export async function softDeleteCustomer(id: number, userId: number): Promise<boolean> {
   const db = await getDb();
   const result = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(customers)
-    .where(eq(customers.userId, userId));
-  return Number(result[0]?.count ?? 0);
+    .update(customers)
+    .set({ isActive: false, updatedAt: new Date() })
+    .where(and(eq(customers.id, id), eq(customers.userId, userId)))
+    .returning();
+  return result.length > 0;
 }
 
 export async function getAtRiskCustomers(userId: number): Promise<Customer[]> {
@@ -304,11 +241,14 @@ export async function getAtRiskCustomers(userId: number): Promise<Customer[]> {
     .where(
       and(
         eq(customers.userId, userId),
-        eq(customers.isChurned, false),
-        sql`${customers.churnRisk} IN ('medium', 'high', 'critical')`
+        eq(customers.isActive, true),
+        or(
+          eq(customers.healthStatus, "at_risk"),
+          eq(customers.healthStatus, "critical")
+        )
       )
     )
-    .orderBy(desc(customers.churnRiskScore));
+    .orderBy(asc(customers.healthScore));
 }
 
 export async function getChurnedCustomers(userId: number): Promise<Customer[]> {
@@ -316,281 +256,280 @@ export async function getChurnedCustomers(userId: number): Promise<Customer[]> {
   return db
     .select()
     .from(customers)
-    .where(and(eq(customers.userId, userId), eq(customers.isChurned, true)))
-    .orderBy(desc(customers.churnedAt));
+    .where(
+      and(
+        eq(customers.userId, userId),
+        eq(customers.healthStatus, "churned")
+      )
+    )
+    .orderBy(desc(customers.updatedAt));
 }
 
-export async function getTotalMrr(userId: number): Promise<number> {
+export async function getCustomersWithUpcomingRenewals(
+  userId: number,
+  withinDays: number = 30
+): Promise<Customer[]> {
+  const db = await getDb();
+  const now = new Date();
+  const future = new Date();
+  future.setDate(future.getDate() + withinDays);
+  return db
+    .select()
+    .from(customers)
+    .where(
+      and(
+        eq(customers.userId, userId),
+        eq(customers.isActive, true),
+        gte(customers.renewalDate, now),
+        lte(customers.renewalDate, future)
+      )
+    )
+    .orderBy(asc(customers.renewalDate));
+}
+
+export async function updateCustomerHealthScore(
+  id: number,
+  userId: number,
+  score: number,
+  healthStatus: "healthy" | "at_risk" | "critical" | "churned",
+  churnRiskScore: string
+): Promise<Customer | null> {
   const db = await getDb();
   const result = await db
-    .select({ total: sql<string>`COALESCE(SUM(${customers.mrr}), 0)` })
+    .update(customers)
+    .set({
+      healthScore: score,
+      healthStatus,
+      churnRiskScore,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(customers.id, id), eq(customers.userId, userId)))
+    .returning();
+  return result[0] ?? null;
+}
+
+export async function updateCustomerLastActivity(
+  id: number,
+  userId: number,
+  activityType: "login" | "activity"
+): Promise<void> {
+  const db = await getDb();
+  const now = new Date();
+  const updateData: Partial<Customer> =
+    activityType === "login"
+      ? { lastLoginAt: now, lastActivityAt: now, updatedAt: now }
+      : { lastActivityAt: now, updatedAt: now };
+  await db
+    .update(customers)
+    .set(updateData)
+    .where(and(eq(customers.id, id), eq(customers.userId, userId)));
+}
+
+export async function getCustomerCountByHealthStatus(
+  userId: number
+): Promise<Record<string, number>> {
+  const db = await getDb();
+  const result = await db
+    .select({
+      healthStatus: customers.healthStatus,
+      count: sql<number>`count(*)::int`,
+    })
     .from(customers)
-    .where(and(eq(customers.userId, userId), eq(customers.isChurned, false)));
+    .where(and(eq(customers.userId, userId), eq(customers.isActive, true)))
+    .groupBy(customers.healthStatus);
+  return result.reduce(
+    (acc, row) => {
+      acc[row.healthStatus] = row.count;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+}
+
+export async function getTotalMrrByUserId(userId: number): Promise<number> {
+  const db = await getDb();
+  const result = await db
+    .select({ total: sql<string>`coalesce(sum(mrr), 0)` })
+    .from(customers)
+    .where(and(eq(customers.userId, userId), eq(customers.isActive, true)));
   return parseFloat(result[0]?.total ?? "0");
 }
 
-// ─── Customer Health Score Helpers ──────────────────────────────────────────
+// ─── Health Score Config Helpers ──────────────────────────────────────────────
 
-export async function getLatestHealthScore(
-  customerId: number,
-  userId: number
-): Promise<CustomerHealthScore | null> {
+export async function getHealthScoreConfigsByUserId(userId: number): Promise<HealthScoreConfig[]> {
+  const db = await getDb();
+  return db
+    .select()
+    .from(healthScoreConfigs)
+    .where(eq(healthScoreConfigs.userId, userId))
+    .orderBy(desc(healthScoreConfigs.isDefault), asc(healthScoreConfigs.name));
+}
+
+export async function getDefaultHealthScoreConfig(userId: number): Promise<HealthScoreConfig | null> {
   const db = await getDb();
   const result = await db
     .select()
-    .from(customerHealthScores)
-    .where(
-      and(
-        eq(customerHealthScores.customerId, customerId),
-        eq(customerHealthScores.userId, userId)
-      )
-    )
-    .orderBy(desc(customerHealthScores.computedAt))
+    .from(healthScoreConfigs)
+    .where(and(eq(healthScoreConfigs.userId, userId), eq(healthScoreConfigs.isDefault, true)))
     .limit(1);
   return result[0] ?? null;
 }
 
-export async function getHealthScoreHistory(
+export async function getHealthScoreConfigById(id: number, userId: number): Promise<HealthScoreConfig | null> {
+  const db = await getDb();
+  const result = await db
+    .select()
+    .from(healthScoreConfigs)
+    .where(and(eq(healthScoreConfigs.id, id), eq(healthScoreConfigs.userId, userId)))
+    .limit(1);
+  return result[0] ?? null;
+}
+
+export async function createHealthScoreConfig(data: NewHealthScoreConfig): Promise<HealthScoreConfig> {
+  const db = await getDb();
+  if (data.isDefault) {
+    await db
+      .update(healthScoreConfigs)
+      .set({ isDefault: false, updatedAt: new Date() })
+      .where(eq(healthScoreConfigs.userId, data.userId));
+  }
+  const result = await db.insert(healthScoreConfigs).values(data).returning();
+  return result[0];
+}
+
+export async function updateHealthScoreConfig(
+  id: number,
+  userId: number,
+  data: Partial<Omit<HealthScoreConfig, "id" | "userId" | "createdAt">>
+): Promise<HealthScoreConfig | null> {
+  const db = await getDb();
+  if (data.isDefault) {
+    await db
+      .update(healthScoreConfigs)
+      .set({ isDefault: false, updatedAt: new Date() })
+      .where(and(eq(healthScoreConfigs.userId, userId), sql`${healthScoreConfigs.id} != ${id}`));
+  }
+  const result = await db
+    .update(healthScoreConfigs)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(healthScoreConfigs.id, id), eq(healthScoreConfigs.userId, userId)))
+    .returning();
+  return result[0] ?? null;
+}
+
+export async function deleteHealthScoreConfig(id: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+  const result = await db
+    .delete(healthScoreConfigs)
+    .where(and(eq(healthScoreConfigs.id, id), eq(healthScoreConfigs.userId, userId)))
+    .returning();
+  return result.length > 0;
+}
+
+// ─── Health Score History Helpers ─────────────────────────────────────────────
+
+export async function getHealthScoreHistoryByCustomerId(
   customerId: number,
   userId: number,
-  limit: number = 30
-): Promise<CustomerHealthScore[]> {
+  limitRows: number = 90
+): Promise<HealthScoreHistory[]> {
   const db = await getDb();
   return db
     .select()
-    .from(customerHealthScores)
-    .where(
-      and(
-        eq(customerHealthScores.customerId, customerId),
-        eq(customerHealthScores.userId, userId)
-      )
-    )
-    .orderBy(desc(customerHealthScores.computedAt))
-    .limit(limit);
+    .from(healthScoreHistory)
+    .where(and(eq(healthScoreHistory.customerId, customerId), eq(healthScoreHistory.userId, userId)))
+    .orderBy(desc(healthScoreHistory.scoredAt))
+    .limit(limitRows);
 }
 
-export async function createHealthScore(
-  data: NewCustomerHealthScore
-): Promise<CustomerHealthScore> {
+export async function createHealthScoreHistory(data: NewHealthScoreHistory): Promise<HealthScoreHistory> {
   const db = await getDb();
-  const [created] = await db
-    .insert(customerHealthScores)
-    .values(data)
-    .returning();
-  return created;
+  const result = await db.insert(healthScoreHistory).values(data).returning();
+  return result[0];
 }
 
-export async function getHealthScoresByUserId(
+export async function getLatestHealthScoreForCustomer(
+  customerId: number,
   userId: number
-): Promise<CustomerHealthScore[]> {
+): Promise<HealthScoreHistory | null> {
   const db = await getDb();
-
-  const subquery = db
-    .select({
-      customerId: customerHealthScores.customerId,
-      maxComputedAt: sql<Date>`MAX(${customerHealthScores.computedAt})`.as(
-        "maxComputedAt"
-      ),
-    })
-    .from(customerHealthScores)
-    .where(eq(customerHealthScores.userId, userId))
-    .groupBy(customerHealthScores.customerId)
-    .as("latest");
-
-  return db
-    .select({
-      id: customerHealthScores.id,
-      customerId: customerHealthScores.customerId,
-      userId: customerHealthScores.userId,
-      overallScore: customerHealthScores.overallScore,
-      engagementScore: customerHealthScores.engagementScore,
-      usageScore: customerHealthScores.usageScore,
-      supportScore: customerHealthScores.supportScore,
-      paymentScore: customerHealthScores.paymentScore,
-      npsScore: customerHealthScores.npsScore,
-      loginFrequency: customerHealthScores.loginFrequency,
-      featureAdoptionRate: customerHealthScores.featureAdoptionRate,
-      supportTicketsLast30Days:
-        customerHealthScores.supportTicketsLast30Days,
-      daysUntilRenewal: customerHealthScores.daysUntilRenewal,
-      scoringVersion: customerHealthScores.scoringVersion,
-      computedAt: customerHealthScores.computedAt,
-      createdAt: customerHealthScores.createdAt,
-    })
-    .from(customerHealthScores)
-    .innerJoin(
-      subquery,
-      and(
-        eq(customerHealthScores.customerId, subquery.customerId),
-        eq(customerHealthScores.computedAt, subquery.maxComputedAt)
-      )
-    )
-    .where(eq(customerHealthScores.userId, userId));
+  const result = await db
+    .select()
+    .from(healthScoreHistory)
+    .where(and(eq(healthScoreHistory.customerId, customerId), eq(healthScoreHistory.userId, userId)))
+    .orderBy(desc(healthScoreHistory.scoredAt))
+    .limit(1);
+  return result[0] ?? null;
 }
 
-// ─── Customer Event Helpers ──────────────────────────────────────────────────
+export async function getAverageHealthScoreByUserId(userId: number): Promise<number> {
+  const db = await getDb();
+  const result = await db
+    .select({ avg: sql<string>`coalesce(avg(${customers.healthScore}), 0)` })
+    .from(customers)
+    .where(and(eq(customers.userId, userId), eq(customers.isActive, true)));
+  return parseFloat(result[0]?.avg ?? "0");
+}
+
+// ─── Customer Event Helpers ───────────────────────────────────────────────────
 
 export async function getCustomerEvents(
   customerId: number,
   userId: number,
-  options?: { limit?: number; offset?: number; eventType?: string }
-): Promise<CustomerEvent[]> {
-  const db = await getDb();
-  const conditions = [
-    eq(customerEvents.customerId, customerId),
-    eq(customerEvents.userId, userId),
-  ];
-
-  if (options?.eventType) {
-    conditions.push(eq(customerEvents.eventType, options.eventType));
-  }
-
-  return db
-    .select()
-    .from(customerEvents)
-    .where(and(...conditions))
-    .orderBy(desc(customerEvents.occurredAt))
-    .limit(options?.limit ?? 50)
-    .offset(options?.offset ?? 0);
-}
-
-export async function createCustomerEvent(
-  data: NewCustomerEvent
-): Promise<CustomerEvent> {
-  const db = await getDb();
-  const [created] = await db.insert(customerEvents).values(data).returning();
-  return created;
-}
-
-export async function bulkCreateCustomerEvents(
-  data: NewCustomerEvent[]
-): Promise<CustomerEvent[]> {
-  const db = await getDb();
-  return db.insert(customerEvents).values(data).returning();
-}
-
-export async function getRecentEventsByUserId(
-  userId: number,
-  limit: number = 50
+  limitRows: number = 50
 ): Promise<CustomerEvent[]> {
   const db = await getDb();
   return db
     .select()
     .from(customerEvents)
-    .where(eq(customerEvents.userId, userId))
+    .where(and(eq(customerEvents.customerId, customerId), eq(customerEvents.userId, userId)))
     .orderBy(desc(customerEvents.occurredAt))
-    .limit(limit);
+    .limit(limitRows);
 }
 
-export async function getEventCountByType(
+export async function getCustomerEventsByType(
   customerId: number,
   userId: number,
-  eventType: string,
-  since?: Date
-): Promise<number> {
+  eventType: "login" | "feature_used" | "api_call" | "support_ticket" | "billing_event" | "custom"
+): Promise<CustomerEvent[]> {
   const db = await getDb();
-  const conditions = [
-    eq(customerEvents.customerId, customerId),
-    eq(customerEvents.userId, userId),
-    eq(customerEvents.eventType, eventType),
-  ];
-
-  if (since) {
-    conditions.push(gte(customerEvents.occurredAt, since));
-  }
-
-  const result = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(customerEvents)
-    .where(and(...conditions));
-  return Number(result[0]?.count ?? 0);
-}
-
-// ─── Churn Prediction Helpers ────────────────────────────────────────────────
-
-export async function getLatestChurnPrediction(
-  customerId: number,
-  userId: number
-): Promise<ChurnPrediction | null> {
-  const db = await getDb();
-  const result = await db
+  return db
     .select()
-    .from(churnPredictions)
+    .from(customerEvents)
     .where(
       and(
-        eq(churnPredictions.customerId, customerId),
-        eq(churnPredictions.userId, userId)
+        eq(customerEvents.customerId, customerId),
+        eq(customerEvents.userId, userId),
+        eq(customerEvents.eventType, eventType)
       )
     )
-    .orderBy(desc(churnPredictions.createdAt))
-    .limit(1);
-  return result[0] ?? null;
+    .orderBy(desc(customerEvents.occurredAt));
 }
 
-export async function getChurnPredictionsByUserId(
+export async function createCustomerEvent(data: NewCustomerEvent): Promise<CustomerEvent> {
+  const db = await getDb();
+  const result = await db.insert(customerEvents).values(data).returning();
+  return result[0];
+}
+
+export async function createCustomerEventsBatch(data: NewCustomerEvent[]): Promise<CustomerEvent[]> {
+  if (data.length === 0) return [];
+  const db = await getDb();
+  const result = await db.insert(customerEvents).values(data).returning();
+  return result;
+}
+
+export async function getCustomerLoginCountSince(
+  customerId: number,
   userId: number,
-  options?: {
-    riskLevel?: "low" | "medium" | "high" | "critical";
-    isActioned?: boolean;
-    limit?: number;
-  }
-): Promise<ChurnPrediction[]> {
+  since: Date
+): Promise<number> {
   const db = await getDb();
-  const conditions = [eq(churnPredictions.userId, userId)];
-
-  if (options?.riskLevel !== undefined) {
-    conditions.push(eq(churnPredictions.riskLevel, options.riskLevel));
-  }
-  if (options?.isActioned !== undefined) {
-    conditions.push(eq(churnPredictions.isActioned, options.isActioned));
-  }
-
-  return db
-    .select()
-    .from(churnPredictions)
-    .where(and(...conditions))
-    .orderBy(desc(churnPredictions.riskScore))
-    .limit(options?.limit ?? 100);
-}
-
-export async function createChurnPrediction(
-  data: NewChurnPrediction
-): Promise<ChurnPrediction> {
-  const db = await getDb();
-  const [created] = await db
-    .insert(churnPredictions)
-    .values(data)
-    .returning();
-  return created;
-}
-
-export async function updateChurnPrediction(
-  id: number,
-  userId: number,
-  data: Partial<Omit<ChurnPrediction, "id" | "createdAt">>
-): Promise<ChurnPrediction> {
-  const db = await getDb();
-  const [updated] = await db
-    .update(churnPredictions)
-    .set({ ...data, updatedAt: new Date() })
+  const result = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(customerEvents)
     .where(
-      and(eq(churnPredictions.id, id), eq(churnPredictions.userId, userId))
-    )
-    .returning();
-  return updated;
-}
-
-export async function markChurnPredictionActioned(
-  id: number,
-  userId: number
-): Promise<ChurnPrediction> {
-  const db = await getDb();
-  const [updated] = await db
-    .update(churnPredictions)
-    .set({ isActioned: true, actionedAt: new Date() })
-    .where(eq(churnPredictions.id, id))
-    .returning();
-  .where(eq(churnPredictions.id, id));
-
-  return updated;
-}
+      and(
+        eq(customerEvents.customerId, customerId),
+        eq(customerEvents.userId, userId),

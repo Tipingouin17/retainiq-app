@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Check, Zap, Shield, BarChart3, Users, Bell, RefreshCw, Loader2 } from "lucide-react";
+import { Check, Zap, Shield, Users, BarChart3, Bell, Headphones, Star, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { SignInButton } from "@clerk/clerk-react";
 import { Link } from "wouter";
 
@@ -15,140 +15,178 @@ const plans = [
     description: "Perfect for small teams getting started with customer retention.",
     badge: null,
     priceId: import.meta.env.VITE_STRIPE_PRICE_ID,
+    color: "border-border",
+    headerColor: "bg-muted/30",
     features: [
       "Up to 1,000 customers tracked",
       "Basic churn prediction",
       "Email alerts & notifications",
-      "3 retention playbooks",
-      "CSV data import",
+      "3 retention campaign templates",
+      "CSV data export",
       "Email support",
-      "Standard analytics dashboard",
-      "Monthly reports",
+      "7-day data history",
+      "1 team member seat",
     ],
     notIncluded: [
-      "Advanced AI segmentation",
+      "Advanced AI insights",
       "Custom integrations",
       "Priority support",
-      "White-label options",
+      "Dedicated account manager",
     ],
-    cta: "Start with Starter",
-    highlight: false,
   },
   {
     name: "Growth",
     price: 250,
-    description: "For growing companies that need deeper insights and automation.",
+    description: "For growing companies serious about reducing churn at scale.",
     badge: "Most Popular",
     priceId: import.meta.env.VITE_STRIPE_PRICE_ID,
+    color: "border-primary shadow-lg shadow-primary/10",
+    headerColor: "bg-primary/5",
     features: [
       "Up to 10,000 customers tracked",
-      "Advanced churn prediction AI",
+      "Advanced AI churn prediction",
       "Real-time alerts & webhooks",
-      "Unlimited retention playbooks",
-      "CRM & Helpdesk integrations",
+      "20 retention campaign templates",
+      "Full data export (CSV, JSON)",
       "Priority email & chat support",
-      "Advanced analytics & cohorts",
-      "Weekly automated reports",
+      "90-day data history",
+      "5 team member seats",
+      "CRM integrations (HubSpot, Salesforce)",
       "A/B testing for campaigns",
-      "Custom audience segments",
+      "Custom retention playbooks",
+      "Monthly performance reports",
     ],
     notIncluded: [
-      "White-label options",
       "Dedicated account manager",
+      "White-label options",
     ],
-    cta: "Start Growing",
-    highlight: true,
   },
   {
     name: "Enterprise",
     price: 500,
-    description: "Full-featured retention platform for large teams and enterprises.",
+    description: "Full-power retention intelligence for large, complex organizations.",
     badge: "Best Value",
     priceId: import.meta.env.VITE_STRIPE_PRICE_ID,
+    color: "border-border",
+    headerColor: "bg-muted/30",
     features: [
       "Unlimited customers tracked",
-      "Enterprise AI & ML models",
-      "Real-time alerts & webhooks",
-      "Unlimited retention playbooks",
-      "All integrations + custom APIs",
+      "Enterprise-grade AI predictions",
+      "Real-time alerts, webhooks & Slack",
+      "Unlimited campaign templates",
+      "Advanced analytics & BI exports",
+      "24/7 priority support",
+      "Unlimited data history",
+      "Unlimited team member seats",
+      "All CRM & data warehouse integrations",
+      "Advanced A/B & multivariate testing",
+      "Custom retention playbooks",
+      "Weekly performance reviews",
       "Dedicated account manager",
-      "Full analytics suite + exports",
-      "Daily automated reports",
-      "A/B testing + multivariate",
-      "Custom audience segments",
+      "Custom AI model training",
       "White-label options",
-      "SLA guarantee (99.9% uptime)",
-      "SSO & advanced security",
-      "Onboarding & training sessions",
+      "SLA guarantees",
     ],
     notIncluded: [],
-    cta: "Go Enterprise",
-    highlight: false,
   },
 ];
 
 const faqs = [
   {
-    question: "Can I change plans later?",
+    question: "Can I switch plans at any time?",
     answer:
-      "Yes, you can upgrade or downgrade your plan at any time. Changes take effect at the start of your next billing cycle.",
+      "Yes! You can upgrade or downgrade your plan at any time. Changes take effect immediately, and we'll prorate any billing differences.",
   },
   {
     question: "Is there a free trial?",
     answer:
-      "We offer a 14-day free trial on all plans. No credit card required to get started.",
+      "We offer a 14-day free trial on all plans. No credit card required to get started — just sign up and explore RetainIQ risk-free.",
   },
   {
     question: "What counts as a 'tracked customer'?",
     answer:
-      "A tracked customer is any unique end-user whose behavior and retention metrics are actively monitored in your RetainIQ dashboard.",
+      "A tracked customer is any unique end-user in your system that RetainIQ monitors for churn signals. Deleted or churned customers no longer count toward your limit.",
   },
   {
-    question: "Do you offer annual billing?",
+    question: "Do you offer discounts for annual billing?",
     answer:
-      "Yes! Annual billing saves you 20% compared to monthly billing. Contact our sales team to switch.",
+      "Yes! Paying annually saves you 20% compared to monthly billing. Contact us to switch to an annual plan at any time.",
   },
   {
     question: "What integrations are supported?",
     answer:
-      "We support Salesforce, HubSpot, Intercom, Zendesk, Segment, and many more. Enterprise plans include custom API integrations.",
+      "Growth plans include HubSpot and Salesforce. Enterprise plans include all CRM platforms, data warehouses (Snowflake, BigQuery), and custom webhook integrations.",
   },
   {
-    question: "How secure is my data?",
+    question: "How does the AI churn prediction work?",
     answer:
-      "All data is encrypted in transit and at rest. We're SOC 2 Type II compliant and GDPR ready.",
+      "RetainIQ analyzes behavioral signals, usage patterns, and engagement metrics to assign real-time churn risk scores to each customer, enabling proactive outreach before they leave.",
+  },
+];
+
+const testimonials = [
+  {
+    name: "Sarah Chen",
+    role: "Head of Customer Success",
+    company: "TechFlow SaaS",
+    avatar: "SC",
+    quote:
+      "RetainIQ reduced our churn rate by 34% in the first quarter. The AI predictions are surprisingly accurate — we caught at-risk accounts we would have completely missed.",
+  },
+  {
+    name: "Marcus Rivera",
+    role: "CEO",
+    company: "GrowthStack",
+    avatar: "MR",
+    quote:
+      "Worth every penny. The Growth plan paid for itself within the first month by saving three enterprise accounts that were about to cancel.",
+  },
+  {
+    name: "Priya Nair",
+    role: "VP of Revenue",
+    company: "Dataloop",
+    avatar: "PN",
+    quote:
+      "The campaign templates and A/B testing features are incredible. Our retention playbooks have never been more data-driven.",
   },
 ];
 
 function PlanCard({ plan, index }: { plan: (typeof plans)[0]; index: number }) {
   const { user } = useAuth();
+  const [loadingPlan, setLoadingPlan] = useState(false);
+
   const checkoutMutation = trpc.payments.createCheckout.useMutation({
     onSuccess: (data) => {
       if (data.url) {
         window.location.href = data.url;
       }
     },
+    onError: () => {
+      setLoadingPlan(false);
+    },
   });
 
   const handleCheckout = () => {
+    setLoadingPlan(true);
     checkoutMutation.mutate({ priceId: plan.priceId });
   };
 
+  const isPending = checkoutMutation.isPending || loadingPlan;
+  const isPopular = plan.badge === "Most Popular";
+
   return (
     <Card
-      className={`relative flex flex-col h-full transition-all duration-200 ${
-        plan.highlight
-          ? "border-2 border-primary shadow-2xl scale-[1.02] bg-primary/5"
-          : "border border-border hover:border-primary/40 hover:shadow-lg"
+      className={`relative flex flex-col transition-all duration-200 hover:-translate-y-1 ${plan.color} ${
+        isPopular ? "ring-2 ring-primary" : ""
       }`}
     >
       {plan.badge && (
-        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10">
+        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
           <Badge
-            className={`px-4 py-1 text-xs font-semibold uppercase tracking-wide ${
-              plan.highlight
+            className={`px-4 py-1 text-xs font-semibold ${
+              isPopular
                 ? "bg-primary text-primary-foreground"
-                : "bg-secondary text-secondary-foreground"
+                : "bg-orange-500 text-white"
             }`}
           >
             {plan.badge}
@@ -156,312 +194,272 @@ function PlanCard({ plan, index }: { plan: (typeof plans)[0]; index: number }) {
         </div>
       )}
 
-      <CardHeader className="pb-4 pt-8 px-6">
-        <div className="flex items-center gap-2 mb-2">
-          <CardTitle className="text-xl font-bold">{plan.name}</CardTitle>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">{plan.description}</p>
+      <CardHeader className={`rounded-t-xl pb-6 pt-8 ${plan.headerColor}`}>
+        <CardTitle className="text-xl font-bold">{plan.name}</CardTitle>
+        <p className="mt-1 text-sm text-muted-foreground">{plan.description}</p>
         <div className="mt-4 flex items-end gap-1">
-          <span className="text-4xl font-extrabold tracking-tight">${plan.price}</span>
-          <span className="text-muted-foreground text-sm mb-1.5">/month</span>
+          <span className="text-4xl font-extrabold tracking-tight">
+            ${plan.price}
+          </span>
+          <span className="mb-1 text-muted-foreground">/month</span>
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col gap-6 px-6 pb-8">
-        <div className="space-y-2.5">
+      <CardContent className="flex flex-1 flex-col gap-6 pt-6">
+        <div className="space-y-3">
           {plan.features.map((feature) => (
-            <div key={feature} className="flex items-start gap-2.5">
-              <Check className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-              <span className="text-sm text-foreground leading-snug">{feature}</span>
+            <div key={feature} className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                <Check className="h-3 w-3 text-primary" strokeWidth={3} />
+              </div>
+              <span className="text-sm text-foreground">{feature}</span>
             </div>
           ))}
           {plan.notIncluded.map((feature) => (
-            <div key={feature} className="flex items-start gap-2.5 opacity-40">
-              <div className="h-4 w-4 mt-0.5 flex-shrink-0 flex items-center justify-center">
-                <div className="h-px w-3 bg-muted-foreground" />
+            <div key={feature} className="flex items-start gap-3 opacity-40">
+              <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted">
+                <Check className="h-3 w-3 text-muted-foreground" strokeWidth={3} />
               </div>
-              <span className="text-sm text-muted-foreground leading-snug line-through">
-                {feature}
-              </span>
+              <span className="text-sm line-through">{feature}</span>
             </div>
           ))}
         </div>
 
-        <div className="mt-auto pt-2">
+        <div className="mt-auto">
           {user ? (
             <Button
               onClick={handleCheckout}
-              disabled={checkoutMutation.isPending}
-              className={`w-full h-11 font-semibold text-sm transition-all ${
-                plan.highlight
-                  ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+              disabled={isPending}
+              size="lg"
+              className={`h-11 w-full text-sm font-semibold ${
+                isPopular
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "variant-outline"
               }`}
-              variant={plan.highlight ? "default" : "outline"}
+              variant={isPopular ? "default" : "outline"}
             >
-              {checkoutMutation.isPending ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Redirecting…
-                </span>
+              {isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
               ) : (
-                plan.cta
+                <>
+                  Get Started with {plan.name}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
               )}
             </Button>
           ) : (
             <SignInButton mode="modal">
               <Button
-                className={`w-full h-11 font-semibold text-sm ${
-                  plan.highlight
-                    ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
-                    : ""
-                }`}
-                variant={plan.highlight ? "default" : "outline"}
+                size="lg"
+                className={`h-11 w-full text-sm font-semibold`}
+                variant={isPopular ? "default" : "outline"}
               >
-                {plan.cta}
+                Get Started with {plan.name}
+                <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </SignInButton>
           )}
+          <p className="mt-3 text-center text-xs text-muted-foreground">
+            14-day free trial · No credit card required
+          </p>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-export default function Pricing() {
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
+function FaqItem({ question, answer }: { question: string; answer: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-b border-border last:border-0">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between py-5 text-left"
+      >
+        <span className="pr-4 text-sm font-semibold md:text-base">{question}</span>
+        <span
+          className={`shrink-0 text-muted-foreground transition-transform duration-200 ${
+            open ? "rotate-45" : ""
+          }`}
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <line x1="10" y1="4" x2="10" y2="16" />
+            <line x1="4" y1="10" x2="16" y2="10" />
+          </svg>
+        </span>
+      </button>
+      {open && (
+        <p className="pb-5 text-sm leading-relaxed text-muted-foreground">
+          {answer}
+        </p>
+      )}
+    </div>
+  );
+}
 
-  const toggleFaq = (index: number) => {
-    setOpenFaq(openFaq === index ? null : index);
-  };
+export default function Pricing() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Navbar */}
-      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-8">
           <Link to="/">
-            <span className="text-xl font-bold tracking-tight cursor-pointer hover:opacity-80 transition-opacity">
+            <span className="flex items-center gap-2 text-xl font-extrabold tracking-tight">
+              <Zap className="h-5 w-5 text-primary" />
               RetainIQ
             </span>
           </Link>
-          <nav className="flex items-center gap-4">
-            <Link to="/">
-              <Button variant="ghost" className="h-9 px-3 text-sm">
-                Home
-              </Button>
+
+          {/* Desktop nav */}
+          <nav className="hidden items-center gap-6 md:flex">
+            <Link to="/" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+              Home
             </Link>
-            <Link to="/dashboard">
-              <Button className="h-9 px-4 text-sm">Dashboard</Button>
+            <Link to="/pricing" className="text-sm font-medium text-foreground">
+              Pricing
             </Link>
+            {user ? (
+              <Link to="/dashboard">
+                <Button size="sm" className="h-9 px-4">
+                  Dashboard
+                </Button>
+              </Link>
+            ) : (
+              <SignInButton mode="modal">
+                <Button size="sm" className="h-9 px-4">
+                  Get Started
+                </Button>
+              </SignInButton>
+            )}
           </nav>
+
+          {/* Mobile hamburger */}
+          <button
+            className="flex h-10 w-10 items-center justify-center rounded-md hover:bg-muted md:hidden"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? (
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="4" y1="4" x2="16" y2="16" />
+                <line x1="16" y1="4" x2="4" y2="16" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="3" y1="6" x2="17" y2="6" />
+                <line x1="3" y1="10" x2="17" y2="10" />
+                <line x1="3" y1="14" x2="17" y2="14" />
+              </svg>
+            )}
+          </button>
         </div>
+
+        {/* Mobile menu */}
+        {mobileMenuOpen && (
+          <div className="border-t border-border bg-background px-4 pb-4 md:hidden">
+            <nav className="flex flex-col gap-1 pt-3">
+              <Link
+                to="/"
+                className="rounded-md px-3 py-2.5 text-sm font-medium hover:bg-muted"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Home
+              </Link>
+              <Link
+                to="/pricing"
+                className="rounded-md bg-muted px-3 py-2.5 text-sm font-medium"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Pricing
+              </Link>
+              <div className="mt-2">
+                {user ? (
+                  <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)}>
+                    <Button size="sm" className="h-10 w-full px-4">
+                      Dashboard
+                    </Button>
+                  </Link>
+                ) : (
+                  <SignInButton mode="modal">
+                    <Button size="sm" className="h-10 w-full px-4">
+                      Get Started
+                    </Button>
+                  </SignInButton>
+                )}
+              </div>
+            </nav>
+          </div>
+        )}
       </header>
 
       {/* Hero Section */}
-      <section className="py-16 md:py-24 px-4 md:px-8 text-center">
-        <div className="max-w-3xl mx-auto">
-          <Badge className="mb-4 px-3 py-1 text-xs font-medium bg-primary/10 text-primary border-primary/20">
-            Simple, Transparent Pricing
+      <section className="relative overflow-hidden px-4 pb-12 pt-16 md:px-8 md:pb-16 md:pt-24">
+        {/* Background gradient */}
+        <div
+          className="pointer-events-none absolute inset-0 -z-10"
+          aria-hidden="true"
+        >
+          <div className="absolute left-1/2 top-0 h-72 w-72 -translate-x-1/2 rounded-full bg-primary/5 blur-3xl md:h-96 md:w-96" />
+        </div>
+
+        <div className="mx-auto max-w-3xl text-center">
+          <Badge variant="secondary" className="mb-4 px-4 py-1.5 text-xs font-medium">
+            <Star className="mr-1.5 h-3 w-3 text-yellow-500" />
+            Trusted by 2,000+ SaaS companies
           </Badge>
-          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight mb-4">
-            Retain more customers.
-            <br />
-            <span className="text-primary">Grow faster.</span>
+          <h1 className="text-3xl font-extrabold tracking-tight md:text-5xl lg:text-6xl">
+            Simple pricing that{" "}
+            <span className="text-primary">scales with you</span>
           </h1>
-          <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed">
-            Choose the plan that fits your team. All plans include a 14-day free trial —
-            no credit card required.
+          <p className="mt-4 text-base text-muted-foreground md:text-xl">
+            Stop losing customers silently. RetainIQ gives you the AI-powered
+            insights and tools to predict churn, engage at-risk users, and grow
+            your MRR — all in one platform.
           </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Check className="h-4 w-4 text-primary" />
+              14-day free trial
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Check className="h-4 w-4 text-primary" />
+              No credit card required
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Check className="h-4 w-4 text-primary" />
+              Cancel anytime
+            </span>
+          </div>
         </div>
       </section>
 
       {/* Pricing Cards */}
-      <section className="pb-20 px-4 md:px-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 items-start">
+      <section className="px-4 pb-16 md:px-8 md:pb-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 lg:gap-8">
             {plans.map((plan, index) => (
               <PlanCard key={plan.name} plan={plan} index={index} />
             ))}
           </div>
-
-          <p className="text-center text-xs text-muted-foreground mt-8">
-            All prices in USD. Cancel anytime. Need a custom plan?{" "}
-            <a
-              href="mailto:sales@retainiq.com"
-              className="underline underline-offset-2 hover:text-foreground transition-colors"
-            >
-              Contact sales
-            </a>
-            .
-          </p>
         </div>
       </section>
 
-      {/* Feature Comparison Highlights */}
-      <section className="py-16 md:py-20 px-4 md:px-8 bg-muted/40 border-y border-border">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl md:text-3xl font-bold mb-3">
-              Everything you need to reduce churn
-            </h2>
-            <p className="text-muted-foreground text-sm md:text-base max-w-xl mx-auto">
-              RetainIQ gives your team the tools to identify at-risk customers and act before
-              it's too late.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              {
-                icon: <BarChart3 className="h-5 w-5 text-primary" />,
-                title: "Predictive Analytics",
-                description:
-                  "AI-powered churn scoring identifies at-risk customers before they cancel.",
-              },
-              {
-                icon: <Bell className="h-5 w-5 text-primary" />,
-                title: "Smart Alerts",
-                description:
-                  "Get notified instantly when key health signals drop for any customer.",
-              },
-              {
-                icon: <RefreshCw className="h-5 w-5 text-primary" />,
-                title: "Retention Playbooks",
-                description:
-                  "Automated workflows trigger the right action at the right time.",
-              },
-              {
-                icon: <Users className="h-5 w-5 text-primary" />,
-                title: "Audience Segments",
-                description:
-                  "Group customers by behavior, plan, usage, and dozens of other signals.",
-              },
-              {
-                icon: <Shield className="h-5 w-5 text-primary" />,
-                title: "Enterprise Security",
-                description:
-                  "SOC 2 Type II, GDPR-compliant, SSO, and end-to-end encryption.",
-              },
-              {
-                icon: <Zap className="h-5 w-5 text-primary" />,
-                title: "Instant Integrations",
-                description:
-                  "Connect to your CRM, helpdesk, and data warehouse in minutes.",
-              },
-            ].map((item) => (
-              <div
-                key={item.title}
-                className="flex gap-4 p-5 rounded-xl bg-background border border-border hover:border-primary/30 transition-colors"
-              >
-                <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  {item.icon}
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sm mb-1">{item.title}</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {item.description}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ Section */}
-      <section className="py-16 md:py-20 px-4 md:px-8">
-        <div className="max-w-2xl mx-auto">
-          <div className="text-center mb-10">
-            <h2 className="text-2xl md:text-3xl font-bold mb-3">
-              Frequently asked questions
-            </h2>
-            <p className="text-muted-foreground text-sm md:text-base">
-              Still have questions? Email us at{" "}
-              <a
-                href="mailto:support@retainiq.com"
-                className="underline underline-offset-2 hover:text-foreground transition-colors"
-              >
-                support@retainiq.com
-              </a>
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            {faqs.map((faq, index) => (
-              <div
-                key={index}
-                className="border border-border rounded-xl overflow-hidden bg-background hover:border-primary/30 transition-colors"
-              >
-                <button
-                  className="w-full text-left px-5 py-4 flex items-center justify-between gap-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  onClick={() => toggleFaq(index)}
-                  aria-expanded={openFaq === index}
-                >
-                  <span className="font-medium text-sm">{faq.question}</span>
-                  <span
-                    className={`flex-shrink-0 h-5 w-5 rounded-full border border-border flex items-center justify-center transition-transform duration-200 ${
-                      openFaq === index ? "rotate-45 border-primary" : ""
-                    }`}
-                  >
-                    <svg
-                      className="h-3 w-3"
-                      fill="none"
-                      viewBox="0 0 12 12"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path d="M6 2v8M2 6h8" strokeLinecap="round" />
-                    </svg>
-                  </span>
-                </button>
-                {openFaq === index && (
-                  <div className="px-5 pb-4">
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {faq.answer}
-                    </p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Banner */}
-      <section className="py-16 md:py-20 px-4 md:px-8 bg-primary text-primary-foreground">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-2xl md:text-4xl font-extrabold mb-4 leading-tight">
-            Start retaining customers today
-          </h2>
-          <p className="text-primary-foreground/80 mb-8 text-sm md:text-base max-w-xl mx-auto">
-            Join hundreds of SaaS companies using RetainIQ to reduce churn, increase LTV,
-            and build better customer relationships.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <SignInButton mode="modal">
-              <Button
-                size="lg"
-                className="h-12 px-8 bg-background text-foreground hover:bg-background/90 font-semibold text-sm shadow-lg"
-              >
-                Start free 14-day trial
-              </Button>
-            </SignInButton>
-            <a href="mailto:sales@retainiq.com">
-              <Button
-                size="lg"
-                variant="outline"
-                className="h-12 px-8 border-primary-foreground/40 text-primary-foreground hover:bg-primary-foreground/10 font-semibold text-sm w-full sm:w-auto"
-              >
-                Talk to sales
-              </Button>
-            </a>
-          </div>
-          <p className="mt-5 text-xs text-primary-foreground/60">
-            No credit card required • Cancel anytime • GDPR compliant
-          </p>
-        </div>
-      </section>
-    </div>
-  );
-}
+      {/* Feature Comparison Summary */}
+      <section className="border-y border-border bg-muted/30 px-4 py-16 md:px-8">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-10 text-center">
+            <h2 className="text-2xl font-extrabold tracking-tight md:text-3xl">
+              Everything you need to retain customers
