@@ -41,28 +41,27 @@ export type NewSubscription = typeof subscriptions.$inferInsert;
 export const customerHealthStatusEnum = pgEnum("customer_health_status", [
   "healthy",
   "at_risk",
-  "critical",
   "churned",
+  "new",
 ]);
 
 export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),
+  externalId: varchar("externalId", { length: 255 }),
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 255 }).notNull(),
   companyName: varchar("companyName", { length: 255 }),
   mrr: numeric("mrr", { precision: 10, scale: 2 }).notNull().default("0"),
-  plan: varchar("plan", { length: 100 }),
-  healthStatus: customerHealthStatusEnum("healthStatus").notNull().default("healthy"),
-  healthScore: integer("healthScore").notNull().default(100),
-  churnProbability: numeric("churnProbability", { precision: 5, scale: 4 }).notNull().default("0"),
+  plan: varchar("plan", { length: 255 }),
+  healthStatus: customerHealthStatusEnum("healthStatus").notNull().default("new"),
+  healthScore: integer("healthScore").notNull().default(50),
+  churnRisk: numeric("churnRisk", { precision: 5, scale: 4 }).notNull().default("0"),
   lastActiveAt: timestamp("lastActiveAt"),
-  trialEndsAt: timestamp("trialEndsAt"),
-  subscribedAt: timestamp("subscribedAt"),
-  churnedAt: timestamp("churnedAt"),
-  externalId: varchar("externalId", { length: 255 }),
-  notes: text("notes"),
+  signedUpAt: timestamp("signedUpAt"),
+  churndAt: timestamp("churndAt"),
   tags: text("tags"),
+  notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -73,58 +72,73 @@ export type NewCustomer = typeof customers.$inferInsert;
 export const healthScoreFactorTypeEnum = pgEnum("health_score_factor_type", [
   "product_usage",
   "support_tickets",
+  "nps_score",
   "payment_history",
-  "engagement",
-  "nps",
   "feature_adoption",
   "login_frequency",
+  "api_calls",
   "custom",
 ]);
 
-export const healthScoreFactors = pgTable("health_score_factors", {
+export const healthScoreConfigs = pgTable("health_score_configs", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),
-  customerId: integer("customerId").notNull(),
   factorType: healthScoreFactorTypeEnum("factorType").notNull(),
-  factorName: varchar("factorName", { length: 255 }).notNull(),
-  value: numeric("value", { precision: 10, scale: 4 }).notNull().default("0"),
-  weight: numeric("weight", { precision: 5, scale: 4 }).notNull().default("1"),
-  scoredAt: timestamp("scoredAt").defaultNow().notNull(),
+  label: varchar("label", { length: 255 }).notNull(),
+  weight: integer("weight").notNull().default(10),
+  isActive: boolean("isActive").notNull().default(true),
+  thresholdGood: numeric("thresholdGood", { precision: 10, scale: 2 }),
+  thresholdBad: numeric("thresholdBad", { precision: 10, scale: 2 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-export type HealthScoreFactor = typeof healthScoreFactors.$inferSelect;
-export type NewHealthScoreFactor = typeof healthScoreFactors.$inferInsert;
+export type HealthScoreConfig = typeof healthScoreConfigs.$inferSelect;
+export type NewHealthScoreConfig = typeof healthScoreConfigs.$inferInsert;
 
-export const healthScoreHistory = pgTable("health_score_history", {
+export const customerHealthSnapshots = pgTable("customer_health_snapshots", {
   id: serial("id").primaryKey(),
-  userId: integer("userId").notNull(),
   customerId: integer("customerId").notNull(),
+  userId: integer("userId").notNull(),
   healthScore: integer("healthScore").notNull(),
+  churnRisk: numeric("churnRisk", { precision: 5, scale: 4 }).notNull(),
   healthStatus: customerHealthStatusEnum("healthStatus").notNull(),
-  churnProbability: numeric("churnProbability", { precision: 5, scale: 4 }).notNull().default("0"),
+  scoreBreakdown: text("scoreBreakdown"),
   snapshotAt: timestamp("snapshotAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export type HealthScoreHistory = typeof healthScoreHistory.$inferSelect;
-export type NewHealthScoreHistory = typeof healthScoreHistory.$inferInsert;
+export type CustomerHealthSnapshot = typeof customerHealthSnapshots.$inferSelect;
+export type NewCustomerHealthSnapshot = typeof customerHealthSnapshots.$inferInsert;
+
+export const customerEvents = pgTable("customer_events", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customerId").notNull(),
+  userId: integer("userId").notNull(),
+  eventType: varchar("eventType", { length: 255 }).notNull(),
+  eventSource: varchar("eventSource", { length: 255 }),
+  properties: text("properties"),
+  occurredAt: timestamp("occurredAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CustomerEvent = typeof customerEvents.$inferSelect;
+export type NewCustomerEvent = typeof customerEvents.$inferInsert;
 
 export const playbookTriggerTypeEnum = pgEnum("playbook_trigger_type", [
   "health_score_drops_below",
   "health_score_rises_above",
-  "churn_probability_exceeds",
-  "no_login_for_days",
-  "mrr_drops",
-  "trial_ending_soon",
+  "churn_risk_exceeds",
+  "no_login_days",
+  "mrr_change",
   "manual",
-  "custom_event",
+  "customer_created",
+  "event_occurred",
 ]);
 
 export const playbookStatusEnum = pgEnum("playbook_status", [
   "active",
-  "paused",
-  "archived",
+  "inactive",
   "draft",
 ]);
 
@@ -134,10 +148,10 @@ export const playbooks = pgTable("playbooks", {
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   triggerType: playbookTriggerTypeEnum("triggerType").notNull(),
-  triggerThreshold: numeric("triggerThreshold", { precision: 10, scale: 4 }),
+  triggerValue: numeric("triggerValue", { precision: 10, scale: 2 }),
+  triggerEventType: varchar("triggerEventType", { length: 255 }),
   status: playbookStatusEnum("status").notNull().default("draft"),
   runCount: integer("runCount").notNull().default(0),
-  lastRunAt: timestamp("lastRunAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -145,32 +159,31 @@ export const playbooks = pgTable("playbooks", {
 export type Playbook = typeof playbooks.$inferSelect;
 export type NewPlaybook = typeof playbooks.$inferInsert;
 
-export const playbookStepTypeEnum = pgEnum("playbook_step_type", [
+export const playbookActionTypeEnum = pgEnum("playbook_action_type", [
   "send_email",
   "create_task",
-  "send_slack_message",
+  "send_slack_notification",
   "add_tag",
+  "remove_tag",
   "update_health_status",
   "webhook",
   "wait_days",
 ]);
 
-export const playbookSteps = pgTable("playbook_steps", {
+export const playbookActions = pgTable("playbook_actions", {
   id: serial("id").primaryKey(),
-  userId: integer("userId").notNull(),
   playbookId: integer("playbookId").notNull(),
-  stepOrder: integer("stepOrder").notNull().default(0),
-  stepType: playbookStepTypeEnum("stepType").notNull(),
-  stepName: varchar("stepName", { length: 255 }).notNull(),
+  userId: integer("userId").notNull(),
+  actionType: playbookActionTypeEnum("actionType").notNull(),
+  actionOrder: integer("actionOrder").notNull().default(0),
   config: text("config").notNull(),
   delayDays: integer("delayDays").notNull().default(0),
-  isEnabled: boolean("isEnabled").notNull().default(true),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-export type PlaybookStep = typeof playbookSteps.$inferSelect;
-export type NewPlaybookStep = typeof playbookSteps.$inferInsert;
+export type PlaybookAction = typeof playbookActions.$inferSelect;
+export type NewPlaybookAction = typeof playbookActions.$inferInsert;
 
 export const playbookRunStatusEnum = pgEnum("playbook_run_status", [
   "pending",
@@ -182,15 +195,14 @@ export const playbookRunStatusEnum = pgEnum("playbook_run_status", [
 
 export const playbookRuns = pgTable("playbook_runs", {
   id: serial("id").primaryKey(),
-  userId: integer("userId").notNull(),
   playbookId: integer("playbookId").notNull(),
   customerId: integer("customerId").notNull(),
+  userId: integer("userId").notNull(),
   status: playbookRunStatusEnum("status").notNull().default("pending"),
-  currentStepId: integer("currentStepId"),
+  currentActionOrder: integer("currentActionOrder").notNull().default(0),
   startedAt: timestamp("startedAt"),
   completedAt: timestamp("completedAt"),
   failureReason: text("failureReason"),
-  triggerSnapshot: text("triggerSnapshot"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -198,61 +210,26 @@ export const playbookRuns = pgTable("playbook_runs", {
 export type PlaybookRun = typeof playbookRuns.$inferSelect;
 export type NewPlaybookRun = typeof playbookRuns.$inferInsert;
 
-export const playbookStepRunStatusEnum = pgEnum("playbook_step_run_status", [
-  "pending",
-  "completed",
-  "failed",
-  "skipped",
-]);
-
-export const playbookStepRuns = pgTable("playbook_step_runs", {
+export const playbookRunActionLogs = pgTable("playbook_run_action_logs", {
   id: serial("id").primaryKey(),
-  userId: integer("userId").notNull(),
   playbookRunId: integer("playbookRunId").notNull(),
-  playbookStepId: integer("playbookStepId").notNull(),
-  status: playbookStepRunStatusEnum("status").notNull().default("pending"),
-  executedAt: timestamp("executedAt"),
-  result: text("result"),
-  errorMessage: text("errorMessage"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
-
-export type PlaybookStepRun = typeof playbookStepRuns.$inferSelect;
-export type NewPlaybookStepRun = typeof playbookStepRuns.$inferInsert;
-
-export const customerEventTypeEnum = pgEnum("customer_event_type", [
-  "login",
-  "feature_used",
-  "support_ticket_opened",
-  "support_ticket_resolved",
-  "payment_succeeded",
-  "payment_failed",
-  "nps_submitted",
-  "onboarding_completed",
-  "integration_connected",
-  "export_performed",
-  "custom",
-]);
-
-export const customerEvents = pgTable("customer_events", {
-  id: serial("id").primaryKey(),
+  playbookActionId: integer("playbookActionId").notNull(),
   userId: integer("userId").notNull(),
-  customerId: integer("customerId").notNull(),
-  eventType: customerEventTypeEnum("eventType").notNull(),
-  eventName: varchar("eventName", { length: 255 }).notNull(),
-  properties: text("properties"),
-  occurredAt: timestamp("occurredAt").defaultNow().notNull(),
+  status: playbookRunStatusEnum("status").notNull().default("pending"),
+  executedAt: timestamp("executedAt"),
+  resultPayload: text("resultPayload"),
+  failureReason: text("failureReason"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
-export type CustomerEvent = typeof customerEvents.$inferSelect;
-export type NewCustomerEvent = typeof customerEvents.$inferInsert;
+export type PlaybookRunActionLog = typeof playbookRunActionLogs.$inferSelect;
+export type NewPlaybookRunActionLog = typeof playbookRunActionLogs.$inferInsert;
 
 export const taskStatusEnum = pgEnum("task_status", [
   "open",
   "in_progress",
   "completed",
-  "cancelled",
+  "dismissed",
 ]);
 
 export const taskPriorityEnum = pgEnum("task_priority", [
@@ -265,7 +242,7 @@ export const taskPriorityEnum = pgEnum("task_priority", [
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),
-  customerId: integer("customerId").notNull(),
+  customerId: integer("customerId"),
   playbookRunId: integer("playbookRunId"),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
@@ -280,12 +257,49 @@ export const tasks = pgTable("tasks", {
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
 
+export const integrationProviderEnum = pgEnum("integration_provider", [
+  "stripe",
+  "intercom",
+  "hubspot",
+  "slack",
+  "segment",
+  "mixpanel",
+  "amplitude",
+  "custom_webhook",
+]);
+
+export const integrationStatusEnum = pgEnum("integration_status", [
+  "connected",
+  "disconnected",
+  "error",
+  "pending",
+]);
+
+export const integrations = pgTable("integrations", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  provider: integrationProviderEnum("provider").notNull(),
+  status: integrationStatusEnum("status").notNull().default("pending"),
+  accessToken: text("accessToken"),
+  refreshToken: text("refreshToken"),
+  tokenExpiresAt: timestamp("tokenExpiresAt"),
+  webhookSecret: varchar("webhookSecret", { length: 255 }),
+  externalWorkspaceId: varchar("externalWorkspaceId", { length: 255 }),
+  config: text("config"),
+  lastSyncAt: timestamp("lastSyncAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type Integration = typeof integrations.$inferSelect;
+export type NewIntegration = typeof integrations.$inferInsert;
+
 export const alertTypeEnum = pgEnum("alert_type", [
-  "churn_risk",
+  "churn_risk_spike",
   "health_score_drop",
-  "payment_failed",
-  "trial_expiring",
   "no_activity",
+  "mrr_drop",
+  "payment_failed",
   "playbook_failed",
 ]);
 
@@ -298,72 +312,56 @@ export const alertSeverityEnum = pgEnum("alert_severity", [
 export const alerts = pgTable("alerts", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),
-  customerId: integer("customerId").notNull(),
+  customerId: integer("customerId"),
   alertType: alertTypeEnum("alertType").notNull(),
   severity: alertSeverityEnum("severity").notNull().default("warning"),
   title: varchar("title", { length: 255 }).notNull(),
   message: text("message").notNull(),
   isRead: boolean("isRead").notNull().default(false),
-  isDismissed: boolean("isDismissed").notNull().default(false),
-  readAt: timestamp("readAt"),
-  dismissedAt: timestamp("dismissedAt"),
+  resolvedAt: timestamp("resolvedAt"),
+  metadata: text("metadata"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type Alert = typeof alerts.$inferSelect;
 export type NewAlert = typeof alerts.$inferInsert;
 
-export const integrationProviderEnum = pgEnum("integration_provider", [
-  "stripe",
-  "intercom",
-  "hubspot",
-  "slack",
-  "segment",
-  "mixpanel",
-  "amplitude",
-  "zapier",
-  "webhook",
-]);
-
-export const integrationStatusEnum = pgEnum("integration_status", [
-  "active",
-  "inactive",
-  "error",
-  "pending_auth",
-]);
-
-export const integrations = pgTable("integrations", {
+export const npsResponses = pgTable("nps_responses", {
   id: serial("id").primaryKey(),
+  customerId: integer("customerId").notNull(),
   userId: integer("userId").notNull(),
-  provider: integrationProviderEnum("provider").notNull(),
-  status: integrationStatusEnum("status").notNull().default("pending_auth"),
-  accessToken: text("accessToken"),
-  refreshToken: text("refreshToken"),
-  tokenExpiresAt: timestamp("tokenExpiresAt"),
-  webhookUrl: varchar("webhookUrl", { length: 255 }),
-  webhookSecret: varchar("webhookSecret", { length: 255 }),
-  config: text("config"),
-  lastSyncAt: timestamp("lastSyncAt"),
-  errorMessage: text("errorMessage"),
+  score: integer("score").notNull(),
+  feedback: text("feedback"),
+  surveySource: varchar("surveySource", { length: 255 }),
+  respondedAt: timestamp("respondedAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-export type Integration = typeof integrations.$inferSelect;
-export type NewIntegration = typeof integrations.$inferInsert;
+export type NpsResponse = typeof npsResponses.$inferSelect;
+export type NewNpsResponse = typeof npsResponses.$inferInsert;
 
-export const scoringRules = pgTable("scoring_rules", {
+export const retentionMetricsPeriodEnum = pgEnum("retention_metrics_period", [
+  "daily",
+  "weekly",
+  "monthly",
+]);
+
+export const retentionMetrics = pgTable("retention_metrics", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),
-  factorType: healthScoreFactorTypeEnum("factorType").notNull(),
-  ruleName: varchar("ruleName", { length: 255 }).notNull(),
-  description: text("description"),
-  weight: numeric("weight", { precision: 5, scale: 4 }).notNull().default("1"),
-  isEnabled: boolean("isEnabled").notNull().default(true),
-  config: text("config").notNull(),
+  period: retentionMetricsPeriodEnum("period").notNull(),
+  periodStart: timestamp("periodStart").notNull(),
+  totalCustomers: integer("totalCustomers").notNull().default(0),
+  healthyCount: integer("healthyCount").notNull().default(0),
+  atRiskCount: integer("atRiskCount").notNull().default(0),
+  churnedCount: integer("churnedCount").notNull().default(0),
+  newCount: integer("newCount").notNull().default(0),
+  totalMrr: numeric("totalMrr", { precision: 12, scale: 2 }).notNull().default("0"),
+  churnedMrr: numeric("churnedMrr", { precision: 12, scale: 2 }).notNull().default("0"),
+  averageHealthScore: numeric("averageHealthScore", { precision: 5, scale: 2 }).notNull().default("0"),
+  churnRate: numeric("churnRate", { precision: 5, scale: 4 }).notNull().default("0"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-export type ScoringRule = typeof scoringRules.$inferSelect;
-export type NewScoringRule = typeof scoringRules.$inferInsert;
+export type RetentionMetric = typeof retentionMetrics.$inferSelect;
+export type NewRetentionMetric = typeof retentionMetrics.$inferInsert;

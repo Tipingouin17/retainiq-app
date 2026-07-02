@@ -1,184 +1,187 @@
 import { useState } from "react";
-import { Check, Zap, Shield, BarChart3, Users, Bell, RefreshCw, Loader2 } from "lucide-react";
+import { Check, Zap, Shield, Users, BarChart3, Bell, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { trpc } from "@/lib/trpc";
 import { SignInButton } from "@clerk/clerk-react";
 import { Link } from "wouter";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 const plans = [
   {
     name: "Starter",
     price: 100,
     description: "Perfect for small teams getting started with customer retention.",
+    priceId: import.meta.env.VITE_STRIPE_PRICE_ID_STARTER || import.meta.env.VITE_STRIPE_PRICE_ID,
     badge: null,
-    priceId: import.meta.env.VITE_STRIPE_PRICE_ID,
     features: [
       "Up to 500 tracked customers",
-      "Basic churn prediction",
-      "Email alerts & notifications",
-      "5 retention workflows",
-      "CSV data import",
-      "Standard analytics dashboard",
-      "Email support",
+      "Basic retention analytics",
+      "Email campaign automation",
+      "3 retention workflows",
+      "Standard email support",
+      "CSV data export",
+      "7-day data retention history",
     ],
     notIncluded: [
-      "Advanced AI insights",
-      "CRM integrations",
-      "Custom playbooks",
+      "Advanced AI predictions",
+      "Custom integrations",
       "Dedicated account manager",
     ],
-    cta: "Get Started",
-    highlight: false,
   },
   {
     name: "Growth",
     price: 250,
-    description: "For growing businesses ready to take retention to the next level.",
+    description: "For growing businesses that need deeper insights and automation.",
+    priceId: import.meta.env.VITE_STRIPE_PRICE_ID_GROWTH || import.meta.env.VITE_STRIPE_PRICE_ID,
     badge: "Most Popular",
-    priceId: import.meta.env.VITE_STRIPE_PRICE_ID,
     features: [
       "Up to 5,000 tracked customers",
-      "Advanced churn prediction (AI-powered)",
-      "Real-time alerts & notifications",
+      "Advanced retention analytics",
+      "Email & SMS campaign automation",
       "Unlimited retention workflows",
-      "CRM integrations (HubSpot, Salesforce)",
-      "Advanced analytics & reporting",
-      "Custom retention playbooks",
-      "A/B testing for campaigns",
+      "AI-powered churn predictions",
       "Priority email & chat support",
+      "90-day data retention history",
+      "Slack & Zapier integrations",
+      "A/B testing for campaigns",
     ],
     notIncluded: [
-      "White-label options",
       "Dedicated account manager",
     ],
-    cta: "Start Growing",
-    highlight: true,
   },
   {
     name: "Enterprise",
     price: 500,
-    description: "For large organizations requiring full-scale retention infrastructure.",
+    description: "Full-featured retention engine for large teams and complex needs.",
+    priceId: import.meta.env.VITE_STRIPE_PRICE_ID_ENTERPRISE || import.meta.env.VITE_STRIPE_PRICE_ID,
     badge: "Best Value",
-    priceId: import.meta.env.VITE_STRIPE_PRICE_ID,
     features: [
       "Unlimited tracked customers",
-      "Enterprise AI & predictive modeling",
-      "Real-time alerts & notifications",
+      "Full retention analytics suite",
+      "Omnichannel campaign automation",
       "Unlimited retention workflows",
-      "All CRM & data warehouse integrations",
-      "Custom analytics & BI exports",
-      "Custom retention playbooks",
-      "Advanced A/B testing",
-      "White-label options",
+      "Advanced AI churn predictions",
       "Dedicated account manager",
+      "Unlimited data retention history",
+      "Custom integrations & API access",
+      "A/B testing for campaigns",
+      "White-label reporting",
       "SLA guarantee (99.9% uptime)",
       "Custom onboarding & training",
     ],
     notIncluded: [],
-    cta: "Contact Sales",
-    highlight: false,
   },
 ];
 
-const featureHighlights = [
+const faqs = [
   {
-    icon: BarChart3,
-    title: "Predictive Churn Analytics",
-    description: "Identify at-risk customers before they leave using machine learning models trained on your data.",
+    question: "Can I switch plans at any time?",
+    answer: "Yes! You can upgrade or downgrade your plan at any time. Changes take effect at the start of your next billing cycle.",
   },
   {
-    icon: Bell,
-    title: "Smart Alerting",
-    description: "Get notified the moment a customer shows signs of disengagement so your team can act fast.",
+    question: "Is there a free trial?",
+    answer: "We offer a 14-day free trial on all plans. No credit card required to get started.",
   },
   {
-    icon: RefreshCw,
-    title: "Automated Workflows",
-    description: "Build retention sequences that trigger automatically based on customer behavior and health scores.",
+    question: "What payment methods do you accept?",
+    answer: "We accept all major credit cards (Visa, Mastercard, American Express) as well as ACH bank transfers for annual plans.",
   },
   {
-    icon: Users,
-    title: "Team Collaboration",
-    description: "Assign accounts, share playbooks, and track team performance across the entire retention funnel.",
+    question: "Can I cancel my subscription?",
+    answer: "You can cancel at any time with no penalties. Your access continues until the end of your current billing period.",
   },
   {
-    icon: Shield,
-    title: "Enterprise Security",
-    description: "SOC 2 Type II compliant with SSO, role-based access control, and audit logs built in.",
+    question: "Do you offer annual billing discounts?",
+    answer: "Yes! Annual billing saves you 20% compared to monthly billing. Contact us to set up annual billing.",
   },
   {
-    icon: Zap,
-    title: "Instant Integrations",
-    description: "Connect to your existing CRM, helpdesk, and billing tools in minutes with one-click integrations.",
+    question: "What counts as a 'tracked customer'?",
+    answer: "A tracked customer is any end-user whose behavior and engagement data is actively monitored within RetainIQ for retention analysis.",
   },
 ];
 
-function PlanCard({ plan, index }: { plan: typeof plans[0]; index: number }) {
+function PlanCard({
+  plan,
+  isPopular,
+}: {
+  plan: (typeof plans)[0];
+  isPopular: boolean;
+}) {
   const { user } = useAuth();
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
   const checkoutMutation = trpc.payments.createCheckout.useMutation({
     onSuccess: (data) => {
       if (data.url) {
         window.location.href = data.url;
       }
     },
+    onError: () => {
+      setIsRedirecting(false);
+    },
   });
 
   const handleCheckout = () => {
+    setIsRedirecting(true);
     checkoutMutation.mutate({ priceId: plan.priceId });
   };
 
+  const isPending = checkoutMutation.isPending || isRedirecting;
+
   return (
     <Card
-      className={`relative flex flex-col transition-all duration-300 hover:shadow-xl ${
-        plan.highlight
-          ? "border-2 border-primary shadow-lg scale-100 md:scale-105 z-10 bg-primary/5"
-          : "border border-border hover:border-primary/50"
+      className={`relative flex flex-col transition-all duration-200 hover:shadow-xl ${
+        isPopular
+          ? "border-2 border-blue-500 shadow-lg shadow-blue-500/10 scale-105"
+          : "border border-gray-200 dark:border-gray-700 hover:border-blue-300"
       }`}
     >
       {plan.badge && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <Badge
-            className={`px-3 py-1 text-xs font-semibold ${
-              plan.highlight
-                ? "bg-primary text-primary-foreground"
-                : "bg-secondary text-secondary-foreground"
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-10">
+          <span
+            className={`inline-flex items-center px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-white ${
+              isPopular ? "bg-blue-500" : "bg-emerald-500"
             }`}
           >
             {plan.badge}
-          </Badge>
+          </span>
         </div>
       )}
 
-      <CardHeader className="pb-4 pt-8">
-        <CardTitle className="text-xl font-bold text-foreground">{plan.name}</CardTitle>
-        <p className="text-sm text-muted-foreground mt-1">{plan.description}</p>
+      <CardHeader className="pb-4 pt-8 px-6">
+        <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">
+          {plan.name}
+        </CardTitle>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 min-h-[40px]">
+          {plan.description}
+        </p>
         <div className="mt-4 flex items-end gap-1">
-          <span className="text-4xl md:text-5xl font-extrabold text-foreground">
+          <span className="text-4xl font-extrabold text-gray-900 dark:text-white">
             ${plan.price}
           </span>
-          <span className="text-muted-foreground mb-1 text-sm">/month</span>
+          <span className="text-gray-500 dark:text-gray-400 mb-1">/month</span>
         </div>
       </CardHeader>
 
-      <CardContent className="flex flex-col flex-1 gap-6">
+      <CardContent className="flex flex-col flex-1 px-6 pb-8 gap-6">
         <div className="space-y-3">
           {plan.features.map((feature) => (
-            <div key={feature} className="flex items-start gap-2.5">
-              <div className="mt-0.5 flex-shrink-0 w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center">
-                <Check className="w-2.5 h-2.5 text-primary" strokeWidth={3} />
+            <div key={feature} className="flex items-start gap-3">
+              <div className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                <Check className="w-3 h-3 text-blue-600 dark:text-blue-400" strokeWidth={3} />
               </div>
-              <span className="text-sm text-foreground">{feature}</span>
+              <span className="text-sm text-gray-700 dark:text-gray-300">{feature}</span>
             </div>
           ))}
           {plan.notIncluded.map((feature) => (
-            <div key={feature} className="flex items-start gap-2.5 opacity-40">
-              <div className="mt-0.5 flex-shrink-0 w-4 h-4 rounded-full bg-muted flex items-center justify-center">
-                <span className="w-2 h-0.5 bg-muted-foreground rounded-full block" />
+            <div key={feature} className="flex items-start gap-3 opacity-40">
+              <div className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                <span className="w-3 h-0.5 bg-gray-400 rounded-full block" />
               </div>
-              <span className="text-sm text-muted-foreground line-through">{feature}</span>
+              <span className="text-sm text-gray-500 dark:text-gray-500 line-through">
+                {feature}
+              </span>
             </div>
           ))}
         </div>
@@ -187,227 +190,215 @@ function PlanCard({ plan, index }: { plan: typeof plans[0]; index: number }) {
           {user ? (
             <Button
               onClick={handleCheckout}
-              disabled={checkoutMutation.isPending}
-              className={`w-full h-11 text-sm font-semibold transition-all ${
-                plan.highlight
-                  ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
-                  : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+              disabled={isPending}
+              className={`w-full h-11 font-semibold text-sm transition-all ${
+                isPopular
+                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg"
+                  : "bg-gray-900 hover:bg-gray-800 text-white dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
               }`}
             >
-              {checkoutMutation.isPending ? (
+              {isPending ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Redirecting…
+                  Redirecting...
                 </span>
               ) : (
-                plan.cta
+                `Get Started with ${plan.name}`
               )}
             </Button>
           ) : (
             <SignInButton mode="modal">
               <Button
-                className={`w-full h-11 text-sm font-semibold transition-all ${
-                  plan.highlight
-                    ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
-                    : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+                className={`w-full h-11 font-semibold text-sm transition-all ${
+                  isPopular
+                    ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg"
+                    : "bg-gray-900 hover:bg-gray-800 text-white dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
                 }`}
               >
-                {plan.cta}
+                Get Started with {plan.name}
               </Button>
             </SignInButton>
           )}
+          <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-3">
+            14-day free trial · No credit card required
+          </p>
         </div>
       </CardContent>
     </Card>
   );
 }
 
+function FaqItem({ question, answer }: { question: string; answer: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-b border-gray-200 dark:border-gray-700 last:border-0">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between py-5 text-left gap-4 group"
+        aria-expanded={open}
+      >
+        <span className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+          {question}
+        </span>
+        <span
+          className={`flex-shrink-0 w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-600 flex items-center justify-center transition-transform duration-200 ${
+            open ? "rotate-45 border-blue-500" : ""
+          }`}
+        >
+          <span className="text-gray-500 dark:text-gray-400 text-lg leading-none mt-[-2px]">+</span>
+        </span>
+      </button>
+      {open && (
+        <div className="pb-5">
+          <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{answer}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Pricing() {
-  const [billingCycle] = useState<"monthly" | "annual">("monthly");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user } = useAuth();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white dark:bg-gray-950">
       {/* Navbar */}
-      <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 flex h-14 items-center justify-between">
-          <Link to="/">
-            <span className="text-lg font-bold text-primary cursor-pointer">RetainIQ</span>
-          </Link>
-          <nav className="flex items-center gap-4">
-            <Link to="/">
-              <span className="text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer hidden sm:inline">
-                Home
-              </span>
+      <nav className="sticky top-0 z-50 bg-white/90 dark:bg-gray-950/90 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 md:px-8">
+          <div className="flex items-center justify-between h-16">
+            <Link to="/" className="flex items-center gap-2 font-bold text-lg text-gray-900 dark:text-white">
+              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+                <RefreshCw className="w-4 h-4 text-white" />
+              </div>
+              RetainIQ
             </Link>
-            <Link to="/dashboard">
-              <Button variant="outline" className="h-9 px-4 text-sm">
-                Dashboard
-              </Button>
-            </Link>
-          </nav>
+
+            {/* Desktop nav */}
+            <div className="hidden md:flex items-center gap-6">
+              <Link to="/pricing" className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                Pricing
+              </Link>
+              {user ? (
+                <Link to="/dashboard">
+                  <Button size="sm" className="h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white">
+                    Dashboard
+                  </Button>
+                </Link>
+              ) : (
+                <SignInButton mode="modal">
+                  <Button size="sm" className="h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white">
+                    Sign In
+                  </Button>
+                </SignInButton>
+              )}
+            </div>
+
+            {/* Mobile hamburger */}
+            <button
+              className="md:hidden flex flex-col gap-1.5 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+            >
+              <span
+                className={`block w-5 h-0.5 bg-gray-600 dark:bg-gray-300 transition-all ${mobileMenuOpen ? "rotate-45 translate-y-2" : ""}`}
+              />
+              <span
+                className={`block w-5 h-0.5 bg-gray-600 dark:bg-gray-300 transition-all ${mobileMenuOpen ? "opacity-0" : ""}`}
+              />
+              <span
+                className={`block w-5 h-0.5 bg-gray-600 dark:bg-gray-300 transition-all ${mobileMenuOpen ? "-rotate-45 -translate-y-2" : ""}`}
+              />
+            </button>
+          </div>
+
+          {/* Mobile menu */}
+          {mobileMenuOpen && (
+            <div className="md:hidden py-4 border-t border-gray-200 dark:border-gray-800 flex flex-col gap-3">
+              <Link
+                to="/pricing"
+                className="text-sm font-medium text-blue-600 dark:text-blue-400 px-2 py-1"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Pricing
+              </Link>
+              {user ? (
+                <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)}>
+                  <Button className="w-full h-10 bg-blue-600 hover:bg-blue-700 text-white">
+                    Dashboard
+                  </Button>
+                </Link>
+              ) : (
+                <SignInButton mode="modal">
+                  <Button className="w-full h-10 bg-blue-600 hover:bg-blue-700 text-white">
+                    Sign In
+                  </Button>
+                </SignInButton>
+              )}
+            </div>
+          )}
         </div>
-      </header>
+      </nav>
 
       {/* Hero */}
-      <section className="pt-16 pb-12 px-4 md:px-8 text-center">
-        <div className="max-w-3xl mx-auto">
-          <Badge variant="secondary" className="mb-4 px-3 py-1 text-xs font-medium">
-            Simple, Transparent Pricing
-          </Badge>
-          <h1 className="text-3xl md:text-5xl font-extrabold text-foreground tracking-tight leading-tight">
-            Invest in retention,{" "}
-            <span className="text-primary">multiply your revenue</span>
+      <section className="relative overflow-hidden bg-gradient-to-b from-blue-50 to-white dark:from-blue-950/20 dark:to-gray-950 pt-16 pb-20 px-4 md:px-8">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-100/40 via-transparent to-transparent dark:from-blue-900/10 pointer-events-none" />
+        <div className="max-w-4xl mx-auto text-center relative z-10">
+          <div className="inline-flex items-center gap-2 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wider mb-6">
+            <Zap className="w-3.5 h-3.5" />
+            Simple, transparent pricing
+          </div>
+          <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 dark:text-white leading-tight mb-4">
+            Retain more customers.{" "}
+            <span className="text-blue-600 dark:text-blue-400">Grow faster.</span>
           </h1>
-          <p className="mt-4 text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            RetainIQ helps you identify at-risk customers and take action before they churn.
-            Choose the plan that fits your team size and ambitions.
+          <p className="text-lg md:text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-8">
+            Choose the plan that fits your team size and ambition. All plans include a 14-day free trial — no credit card needed.
           </p>
-          <p className="mt-3 text-sm text-muted-foreground">
-            All plans include a{" "}
-            <span className="font-semibold text-foreground">14-day free trial</span>. No credit card required.
-          </p>
+          <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500 dark:text-gray-400">
+            <span className="flex items-center gap-1.5">
+              <Check className="w-4 h-4 text-emerald-500" />
+              No setup fees
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Check className="w-4 h-4 text-emerald-500" />
+              Cancel anytime
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Check className="w-4 h-4 text-emerald-500" />
+              14-day free trial
+            </span>
+          </div>
         </div>
       </section>
 
       {/* Pricing Cards */}
-      <section className="pb-16 px-4 md:px-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-4 lg:gap-8 items-start">
-            {plans.map((plan, index) => (
-              <PlanCard key={plan.name} plan={plan} index={index} />
-            ))}
-          </div>
-
-          <p className="text-center text-xs text-muted-foreground mt-8">
-            All prices in USD. Billed monthly. Cancel anytime.{" "}
-            <a href="mailto:support@retainiq.com" className="underline hover:text-foreground transition-colors">
-              Contact us
-            </a>{" "}
-            for annual discounts or custom enterprise pricing.
-          </p>
+      <section className="max-w-7xl mx-auto px-4 md:px-8 py-16 -mt-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
+          {plans.map((plan, i) => (
+            <PlanCard key={plan.name} plan={plan} isPopular={i === 1} />
+          ))}
         </div>
+
+        <p className="text-center text-sm text-gray-400 dark:text-gray-500 mt-8">
+          All prices in USD. Billed monthly.{" "}
+          <span className="text-blue-600 dark:text-blue-400 font-medium">
+            Save 20% with annual billing
+          </span>{" "}
+          — contact us to upgrade.
+        </p>
       </section>
 
-      {/* Feature Highlights */}
-      <section className="py-16 px-4 md:px-8 bg-muted/40 border-t border-border">
-        <div className="max-w-6xl mx-auto">
+      {/* Feature Comparison Summary */}
+      <section className="bg-gray-50 dark:bg-gray-900/50 py-16 px-4 md:px-8">
+        <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-2xl md:text-3xl font-bold text-foreground">
-              Everything you need to stop churn
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-3">
+              Everything you need to reduce churn
             </h2>
-            <p className="mt-3 text-muted-foreground text-sm md:text-base max-w-xl mx-auto">
-              RetainIQ gives your team the tools, data, and automation to keep customers happy and subscribed.
+            <p className="text-gray-500 dark:text-gray-400 max-w-xl mx-auto">
+              RetainIQ gives your team the tools, data, and automation to keep customers engaged and loyal.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featureHighlights.map((feature) => {
-              const Icon = feature.icon;
-              return (
-                <div
-                  key={feature.title}
-                  className="flex gap-4 p-5 rounded-xl bg-background border border-border hover:border-primary/40 hover:shadow-sm transition-all"
-                >
-                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Icon className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-sm text-foreground mb-1">{feature.title}</h3>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{feature.description}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
 
-      {/* FAQ */}
-      <section className="py-16 px-4 md:px-8">
-        <div className="max-w-3xl mx-auto">
-          <h2 className="text-2xl md:text-3xl font-bold text-foreground text-center mb-10">
-            Frequently asked questions
-          </h2>
-          <div className="space-y-6">
-            {[
-              {
-                q: "Can I switch plans later?",
-                a: "Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately and are prorated for the current billing period.",
-              },
-              {
-                q: "Is there a free trial?",
-                a: "Every plan comes with a 14-day free trial. No credit card is required to start, and you can cancel at any time before the trial ends.",
-              },
-              {
-                q: "What payment methods do you accept?",
-                a: "We accept all major credit and debit cards (Visa, Mastercard, Amex) through our secure Stripe-powered checkout. Enterprise customers can request invoice billing.",
-              },
-              {
-                q: "How is 'tracked customers' defined?",
-                a: "A tracked customer is any unique customer profile synced to RetainIQ. This includes customers from your CRM, billing system, or imported CSV files.",
-              },
-              {
-                q: "Do you offer discounts for annual billing?",
-                a: "Yes! Annual plans come with a 20% discount. Contact our sales team at sales@retainiq.com to get set up with an annual subscription.",
-              },
-              {
-                q: "What integrations are available?",
-                a: "RetainIQ integrates with HubSpot, Salesforce, Intercom, Stripe, Chargebee, Segment, and more. Growth and Enterprise plans unlock all integrations.",
-              },
-            ].map((faq) => (
-              <div key={faq.q} className="border-b border-border pb-6 last:border-0 last:pb-0">
-                <h3 className="font-semibold text-foreground text-sm md:text-base mb-2">{faq.q}</h3>
-                <p className="text-muted-foreground text-sm leading-relaxed">{faq.a}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Banner */}
-      <section className="py-16 px-4 md:px-8 bg-primary text-primary-foreground">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-2xl md:text-4xl font-extrabold mb-4">
-            Start retaining more customers today
-          </h2>
-          <p className="text-primary-foreground/80 text-sm md:text-base mb-8 max-w-xl mx-auto">
-            Join hundreds of companies using RetainIQ to reduce churn, increase lifetime value, and build stronger customer relationships.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <SignInButton mode="modal">
-              <Button
-                size="lg"
-                className="h-11 px-8 bg-background text-foreground hover:bg-background/90 font-semibold"
-              >
-                Start Free Trial
-              </Button>
-            </SignInButton>
-            <a href="mailto:sales@retainiq.com">
-              <Button
-                size="lg"
-                variant="outline"
-                className="h-11 px-8 border-primary-foreground/40 text-primary-foreground hover:bg-primary-foreground/10 font-semibold w-full sm:w-auto"
-              >
-                Talk to Sales
-              </Button>
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-8 px-4 md:px-8 border-t border-border bg-background">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <span className="text-sm font-semibold text-primary">RetainIQ</span>
-          <p className="text-xs text-muted-foreground text-center">
-            © {new Date().getFullYear()} RetainIQ. All rights reserved.
-          </p>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <a href="mailto:support@retainiq.com" className="hover:text-foreground transition-colors">
-              support@retainiq.com
-            </a>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
-}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:
