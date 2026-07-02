@@ -1,8 +1,9 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import * as schema from "../drizzle/schema";
 
 let db: ReturnType<typeof drizzle> | null = null;
+let pool: Pool | null = null;
 
 export async function getDb() {
   if (db) return db;
@@ -12,16 +13,22 @@ export async function getDb() {
     throw new Error("DATABASE_URL environment variable is not set");
   }
 
-  const client = postgres(connectionString, {
-    max: 10,
-    idle_timeout: 20,
-    connect_timeout: 10,
+  pool = new Pool({
+    connectionString,
+    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
   });
 
-  db = drizzle(client, { schema });
+  db = drizzle(pool, { schema });
   return db;
 }
 
-export type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+export async function closeDb() {
+  if (pool) {
+    await pool.end();
+    pool = null;
+    db = null;
+  }
+}
 
-export default getDb;
+export { db };
+export type Db = ReturnType<typeof drizzle>;
