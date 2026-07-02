@@ -328,20 +328,6 @@ export const alertRules = pgTable("alert_rules", {
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-// ─── Subscriptions ────────────────────────────────────────────────────────────
-export const subscriptions = pgTable("subscriptions", {
-  id: serial("id").primaryKey(),
-  userId: integer("userId").notNull(),
-  stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }),
-  stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
-  stripePriceId: varchar("stripePriceId", { length: 255 }),
-  status: varchar("status", { length: 50 }).default("inactive").notNull(),
-  currentPeriodStart: timestamp("currentPeriodStart"),
-  currentPeriodEnd: timestamp("currentPeriodEnd"),
-  cancelAtPeriodEnd: boolean("cancelAtPeriodEnd").default(false).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
 
 // ─── Type exports ─────────────────────────────────────────────────────────────
 export type Customer = typeof customers.$inferSelect;
