@@ -322,8 +322,7 @@ export const alertRules = pgTable("alert_rules", {
   isActive: boolean("isActive").default(true).notNull(),
   conditionType: varchar("conditionType", { length: 100 }).notNull(),
   conditionOperator: varchar("conditionOperator", { length: 50 }).notNull(),
-  conditionValue: varchar("conditionValue", { length: 255 }).not
-null().notNull(),
+  conditionValue: varchar("conditionValue", { length: 255 }).notNull(),
   notificationChannels: varchar("notificationChannels", { length: 255 }).default("email").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
