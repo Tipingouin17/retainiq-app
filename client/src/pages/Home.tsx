@@ -1,668 +1,505 @@
-import { useState } from "react";
+```tsx
+import { useAuth } from "@/_core/hooks/useAuth";
+import { SignInButton } from "@clerk/clerk-react";
 import { Link } from "wouter";
-import { SignInButton, SignedIn, SignedOut } from "@clerk/clerk-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { motion } from "framer-motion";
 import {
   Menu,
   X,
-  Activity,
-  Brain,
-  Zap,
-  TrendingDown,
-  DollarSign,
   CheckCircle,
-  ArrowRight,
   BarChart3,
   Users,
-  Bell,
-  Shield,
-  Clock,
-  Target,
-  ChevronRight,
+  Zap,
+  ArrowRight,
   Star,
+  TrendingUp,
+  MessageSquare,
 } from "lucide-react";
 
-const fadeUp = {
-  initial: { opacity: 0, y: 20 },
-  whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true },
-  transition: { duration: 0.5 },
-};
-
-const stagger = (i: number) => ({
-  initial: { opacity: 0, y: 20 },
-  whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true },
-  transition: { duration: 0.5, delay: i * 0.1 },
-});
-
 export default function Home() {
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  const features = [
-    {
-      icon: <Activity className="h-7 w-7 text-violet-500" />,
-      title: "Customer Health Tracking",
-      headline: "Know Your Customer's Health Before They Leave",
-      description:
-        "Stop guessing about customer satisfaction. RetainIQ continuously monitors customer engagement patterns, usage trends, and health signals across your entire customer base. Get real-time visibility into who's thriving and who's at risk—so you can intervene before it's too late.",
-    },
-    {
-      icon: <Brain className="h-7 w-7 text-violet-500" />,
-      title: "Predictive Churn Intelligence",
-      headline: "Predict Churn with 85%+ Accuracy",
-      description:
-        "Our AI-powered churn engine analyzes hundreds of behavioral signals to predict which customers are likely to cancel in the next 30, 60, or 90 days. Identify at-risk accounts automatically, prioritize your retention efforts, and focus your team's energy where it matters most.",
-    },
-    {
-      icon: <Zap className="h-7 w-7 text-violet-500" />,
-      title: "Automated Retention Playbooks",
-      headline: "Turn Predictions Into Action—Automatically",
-      description:
-        "Create if-this-then-that retention workflows that execute instantly. When a customer triggers a churn signal, RetainIQ automatically sends personalized outreach, adjusts pricing, or alerts your CSM—without manual intervention. Your retention team works 24/7.",
-    },
-  ];
-
-  const pricingPlans = [
-    {
-      name: "Starter",
-      price: "$100",
-      period: "/month",
-      description: "Perfect for early-stage SaaS with up to 200 customers.",
-      features: [
-        "Up to 200 tracked customers",
-        "Customer health dashboards",
-        "Basic churn risk scoring",
-        "Email alert notifications",
-        "CSV data import",
-        "Email support",
-      ],
-      cta: "Start Free Trial",
-      highlighted: false,
-    },
-    {
-      name: "Growth",
-      price: "$250",
-      period: "/month",
-      description: "For scaling SaaS teams serious about retention.",
-      features: [
-        "Up to 1,000 tracked customers",
-        "AI churn prediction (85%+ accuracy)",
-        "30/60/90-day risk forecasting",
-        "Automated retention playbooks",
-        "CRM & Slack integrations",
-        "Priority support",
-      ],
-      cta: "Start Free Trial",
-      highlighted: true,
-    },
-    {
-      name: "Scale",
-      price: "$500",
-      period: "/month",
-      description: "Full power for companies protecting significant MRR.",
-      features: [
-        "Unlimited tracked customers",
-        "Advanced AI churn modeling",
-        "Custom retention workflows",
-        "API access & webhooks",
-        "Dedicated CSM onboarding",
-        "SLA-backed support",
-      ],
-      cta: "Start Free Trial",
-      highlighted: false,
-    },
-  ];
-
-  const stats = [
-    { value: "85%+", label: "Churn prediction accuracy" },
-    { value: "3x", label: "Faster retention response time" },
-    { value: "$50K", label: "Saved vs. enterprise alternatives" },
-    { value: "14 days", label: "Free trial, no credit card" },
-  ];
-
-  const problems = [
-    {
-      icon: <DollarSign className="h-5 w-5 text-red-400" />,
-      text: "Enterprise churn tools cost $12,000–$50,000+ per year—out of reach for most startups.",
-    },
-    {
-      icon: <TrendingDown className="h-5 w-5 text-red-400" />,
-      text: "You only discover customers are churning when they cancel—too late to act.",
-    },
-    {
-      icon: <Clock className="h-5 w-5 text-red-400" />,
-      text: "Your CS team manually combs through data instead of actually saving accounts.",
-    },
-  ];
-
-  const solutions = [
-    {
-      icon: <CheckCircle className="h-5 w-5 text-emerald-400" />,
-      text: "Affordable plans starting at $100/month—built specifically for growing SaaS teams.",
-    },
-    {
-      icon: <CheckCircle className="h-5 w-5 text-emerald-400" />,
-      text: "AI predicts churn 30–90 days before it happens so you intervene while there's still time.",
-    },
-    {
-      icon: <CheckCircle className="h-5 w-5 text-emerald-400" />,
-      text: "Automated playbooks handle outreach and escalations while your team sleeps.",
-    },
-  ];
+  const { user, isAuthenticated } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white overflow-x-hidden">
-      {/* ── NAVBAR ── */}
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0f]/90 backdrop-blur-md">
-        <div className="mx-auto max-w-7xl px-4 md:px-8">
-          <div className="flex h-16 items-center justify-between">
-            {/* Logo */}
-            <Link to="/">
-              <div className="flex items-center gap-2 cursor-pointer">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600">
-                  <BarChart3 className="h-4 w-4 text-white" />
-                </div>
-                <span className="text-lg font-bold tracking-tight">RetainIQ</span>
-              </div>
-            </Link>
+    <div className="min-h-screen bg-white text-gray-900 flex flex-col">
+      {/* ── Sticky Navbar ── */}
+      <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 flex items-center justify-between h-16">
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-xl font-bold text-gray-900">RetainIQ</span>
+          </Link>
 
-            {/* Desktop Nav */}
-            <nav className="hidden md:flex items-center gap-6">
-              <a href="#features" className="text-sm text-gray-400 hover:text-white transition-colors">
-                Features
-              </a>
-              <a href="#pricing" className="text-sm text-gray-400 hover:text-white transition-colors">
-                Pricing
-              </a>
-              <SignedIn>
-                <Link to="/dashboard">
-                  <span className="text-sm text-gray-400 hover:text-white transition-colors cursor-pointer">
-                    Dashboard
-                  </span>
-                </Link>
-              </SignedIn>
-            </nav>
+          {/* Desktop Nav */}
+          <nav className="hidden md:flex items-center gap-8">
+            <a href="#features" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
+              Features
+            </a>
+            <a href="#pricing" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
+              Pricing
+            </a>
+          </nav>
 
-            {/* Desktop CTA */}
-            <div className="hidden md:flex items-center gap-3">
-              <SignedOut>
+          {/* Desktop CTA */}
+          <div className="hidden md:flex items-center gap-3">
+            {isAuthenticated ? (
+              <Link to="/dashboard">
+                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white h-10 px-4">
+                  Go to Dashboard
+                  <ArrowRight className="ml-2 w-4 h-4" />
+                </Button>
+              </Link>
+            ) : (
+              <>
                 <SignInButton mode="modal">
-                  <Button variant="ghost" size="sm" className="text-gray-300 hover:text-white">
+                  <Button variant="ghost" size="sm" className="h-10 px-4 text-gray-700">
                     Sign In
                   </Button>
                 </SignInButton>
                 <SignInButton mode="modal">
-                  <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white h-9 px-4">
-                    Start Free Trial
+                  <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white h-10 px-4">
+                    Get Started Free
                   </Button>
                 </SignInButton>
-              </SignedOut>
-              <SignedIn>
-                <Link to="/dashboard">
-                  <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white h-9 px-4">
-                    Go to Dashboard
-                  </Button>
-                </Link>
-              </SignedIn>
-            </div>
-
-            {/* Mobile Hamburger */}
-            <button
-              className="md:hidden flex items-center justify-center h-10 w-10 rounded-md text-gray-400 hover:text-white"
-              onClick={() => setMobileOpen(!mobileOpen)}
-              aria-label="Toggle menu"
-            >
-              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </button>
+              </>
+            )}
           </div>
 
-          {/* Mobile Menu */}
-          {mobileOpen && (
-            <div className="md:hidden border-t border-white/10 py-4 flex flex-col gap-4">
-              <a
-                href="#features"
-                className="text-sm text-gray-400 hover:text-white transition-colors px-1"
-                onClick={() => setMobileOpen(false)}
-              >
-                Features
-              </a>
-              <a
-                href="#pricing"
-                className="text-sm text-gray-400 hover:text-white transition-colors px-1"
-                onClick={() => setMobileOpen(false)}
-              >
-                Pricing
-              </a>
-              <SignedIn>
+          {/* Mobile Hamburger */}
+          <button
+            className="md:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+        </div>
+
+        {/* Mobile Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-gray-100 bg-white px-4 py-4 flex flex-col gap-4">
+            <a
+              href="#features"
+              className="text-sm font-medium text-gray-700 py-2"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Features
+            </a>
+            <a
+              href="#pricing"
+              className="text-sm font-medium text-gray-700 py-2"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Pricing
+            </a>
+            <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
+              {isAuthenticated ? (
                 <Link to="/dashboard">
-                  <span
-                    className="text-sm text-gray-400 hover:text-white transition-colors cursor-pointer px-1"
-                    onClick={() => setMobileOpen(false)}
-                  >
-                    Dashboard
-                  </span>
+                  <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-10">
+                    Go to Dashboard
+                    <ArrowRight className="ml-2 w-4 h-4" />
+                  </Button>
                 </Link>
-              </SignedIn>
-              <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
-                <SignedOut>
+              ) : (
+                <>
                   <SignInButton mode="modal">
-                    <Button variant="ghost" className="w-full justify-start text-gray-300">
+                    <Button variant="outline" className="w-full h-10">
                       Sign In
                     </Button>
                   </SignInButton>
                   <SignInButton mode="modal">
-                    <Button className="w-full bg-violet-600 hover:bg-violet-700 text-white h-10">
-                      Start Free Trial
+                    <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-10">
+                      Get Started Free
                     </Button>
                   </SignInButton>
-                </SignedOut>
-                <SignedIn>
-                  <Link to="/dashboard">
-                    <Button className="w-full bg-violet-600 hover:bg-violet-700 text-white h-10">
-                      Go to Dashboard
-                    </Button>
-                  </Link>
-                </SignedIn>
-              </div>
+                </>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </header>
 
-      {/* ── HERO ── */}
-      <section className="relative overflow-hidden px-4 md:px-8 lg:px-16 pt-20 pb-24 md:pt-32 md:pb-36">
-        {/* Background glow */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[500px] w-[800px] rounded-full bg-violet-700/20 blur-[120px]" />
-        </div>
-
-        <div className="relative mx-auto max-w-4xl text-center">
-          <motion.div {...stagger(0)}>
-            <Badge className="mb-6 inline-flex items-center gap-1.5 bg-violet-500/10 text-violet-400 border border-violet-500/20 px-3 py-1 text-xs font-medium rounded-full">
-              <Star className="h-3 w-3 fill-violet-400" />
-              Now in Early Access — 14-Day Free Trial
-            </Badge>
-          </motion.div>
-
-          <motion.h1
-            {...stagger(1)}
-            className="text-3xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight mb-6"
-          >
-            Stop Losing Customers{" "}
-            <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
-              You Could Have Saved
-            </span>
-          </motion.h1>
-
-          <motion.p
-            {...stagger(2)}
-            className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed"
-          >
-            Enterprise-grade churn prediction and retention automation for SaaS teams that can't afford $50,000/year
-            solutions. Starting at just <span className="text-white font-semibold">$100/month</span>.
-          </motion.p>
-
-          <motion.div {...stagger(3)} className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <SignedOut>
-              <SignInButton mode="modal">
-                <Button
-                  size="lg"
-                  className="w-full sm:w-auto h-12 px-8 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-base rounded-xl shadow-lg shadow-violet-900/40"
-                >
-                  Start Protecting Revenue Today
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </SignInButton>
-            </SignedOut>
-            <SignedIn>
-              <Link to="/dashboard">
-                <Button
-                  size="lg"
-                  className="w-full sm:w-auto h-12 px-8 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-base rounded-xl shadow-lg shadow-violet-900/40"
-                >
-                  Go to Dashboard
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-            </SignedIn>
-            <a href="#pricing">
-              <Button
-                variant="outline"
-                size="lg"
-                className="w-full sm:w-auto h-12 px-8 border-white/20 text-gray-300 hover:text-white hover:bg-white/5 text-base rounded-xl"
-              >
-                View Pricing
-              </Button>
-            </a>
-          </motion.div>
-
-          <motion.p {...stagger(4)} className="mt-5 text-sm text-gray-500">
-            No credit card required · Cancel anytime · Setup in under 10 minutes
-          </motion.p>
-        </div>
-      </section>
-
-      {/* ── STATS BAR ── */}
-      <section className="border-y border-white/10 bg-white/[0.02] px-4 md:px-8 py-10">
-        <div className="mx-auto max-w-5xl grid grid-cols-2 md:grid-cols-4 gap-8">
-          {stats.map((s, i) => (
-            <motion.div key={s.label} {...stagger(i)} className="text-center">
-              <div className="text-2xl md:text-3xl font-bold text-violet-400 mb-1">{s.value}</div>
-              <div className="text-sm text-gray-500">{s.label}</div>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── PROBLEM / SOLUTION ── */}
-      <section className="px-4 md:px-8 lg:px-16 py-20 md:py-28">
-        <div className="mx-auto max-w-5xl">
-          <motion.div {...fadeUp} className="text-center mb-14">
-            <h2 className="text-2xl md:text-4xl font-bold mb-4">
-              The Churn Problem Is{" "}
-              <span className="bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">
-                Costing You More Than You Think
-              </span>
-            </h2>
-            <p className="text-gray-400 max-w-2xl mx-auto text-base md:text-lg">
-              Most SaaS startups discover churn too late—and the tools built to fix it cost more than your entire
-              marketing budget.
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Problems */}
-            <motion.div
-              {...stagger(0)}
-              className="rounded-2xl border border-red-900/40 bg-red-950/20 p-6 md:p-8"
-            >
-              <div className="flex items-center gap-2 mb-6">
-                <TrendingDown className="h-5 w-5 text-red-400" />
-                <h3 className="font-semibold text-red-300 text-sm uppercase tracking-wider">The Problem</h3>
-              </div>
-              <div className="flex flex-col gap-5">
-                {problems.map((p, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div className="mt-0.5 shrink-0">{p.icon}</div>
-                    <p className="text-gray-300 text-sm md:text-base leading-relaxed">{p.text}</p>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Solutions */}
-            <motion.div
-              {...stagger(1)}
-              className="rounded-2xl border border-emerald-900/40 bg-emerald-950/20 p-6 md:p-8"
-            >
-              <div className="flex items-center gap-2 mb-6">
-                <Shield className="h-5 w-5 text-emerald-400" />
-                <h3 className="font-semibold text-emerald-300 text-sm uppercase tracking-wider">The RetainIQ Fix</h3>
-              </div>
-              <div className="flex flex-col gap-5">
-                {solutions.map((s, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div className="mt-0.5 shrink-0">{s.icon}</div>
-                    <p className="text-gray-300 text-sm md:text-base leading-relaxed">{s.text}</p>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
+      <main className="flex-1">
+        {/* ── Hero Section ── */}
+        <section className="relative overflow-hidden bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-20 md:py-32 px-4 md:px-8">
+          {/* Background decorative elements */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-indigo-100 opacity-60 blur-3xl" />
+            <div className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-purple-100 opacity-60 blur-3xl" />
           </div>
-        </div>
-      </section>
 
-      {/* ── FEATURES ── */}
-      <section id="features" className="px-4 md:px-8 lg:px-16 py-20 md:py-28 bg-white/[0.02]">
-        <div className="mx-auto max-w-6xl">
-          <motion.div {...fadeUp} className="text-center mb-14">
-            <Badge className="mb-4 bg-violet-500/10 text-violet-400 border border-violet-500/20 px-3 py-1 text-xs rounded-full">
-              Platform Features
+          <div className="relative max-w-7xl mx-auto text-center">
+            <Badge className="mb-6 bg-indigo-100 text-indigo-700 border-indigo-200 px-4 py-1 text-sm font-medium">
+              🚀 AI-Powered Customer Retention
             </Badge>
-            <h2 className="text-2xl md:text-4xl font-bold mb-4">
-              Everything You Need to{" "}
-              <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
-                Retain More Revenue
-              </span>
-            </h2>
-            <p className="text-gray-400 max-w-2xl mx-auto text-base md:text-lg">
-              Three powerful capabilities working together to protect your MRR—without enterprise complexity or
-              enterprise pricing.
-            </p>
-          </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((f, i) => (
-              <motion.div key={f.title} {...stagger(i)}>
-                <Card className="h-full bg-white/[0.03] border border-white/10 rounded-2xl hover:border-violet-500/40 hover:bg-white/[0.05] transition-all duration-300 group">
+            <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-6">
+              Retain More Customers.{" "}
+              <span className="text-indigo-600">Grow Revenue.</span>
+            </h1>
+
+            <p className="text-lg md:text-xl text-gray-600 max-w-3xl mx-auto mb-10 leading-relaxed">
+              RetainIQ uses intelligent automation and personalized messaging to reduce churn,
+              re-engage at-risk customers, and drive long-term loyalty — all on autopilot.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              {isAuthenticated ? (
+                <Link to="/dashboard">
+                  <Button size="lg" className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white h-12 px-8 text-base font-semibold">
+                    Go to Dashboard
+                    <ArrowRight className="ml-2 w-5 h-5" />
+                  </Button>
+                </Link>
+              ) : (
+                <>
+                  <SignInButton mode="modal">
+                    <Button size="lg" className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white h-12 px-8 text-base font-semibold">
+                      Start Free Trial
+                      <ArrowRight className="ml-2 w-5 h-5" />
+                    </Button>
+                  </SignInButton>
+                  <SignInButton mode="modal">
+                    <Button size="lg" variant="outline" className="w-full sm:w-auto h-12 px-8 text-base font-semibold border-gray-300 text-gray-700 hover:bg-gray-50">
+                      See a Demo
+                    </Button>
+                  </SignInButton>
+                </>
+              )}
+            </div>
+
+            <p className="mt-6 text-sm text-gray-500">
+              No credit card required · 14-day free trial · Cancel anytime
+            </p>
+
+            {/* Social proof */}
+            <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-6 text-sm text-gray-500">
+              <div className="flex items-center gap-1">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                ))}
+                <span className="ml-2 font-medium text-gray-700">4.9/5 rating</span>
+              </div>
+              <div className="hidden sm:block w-px h-4 bg-gray-200" />
+              <span>Trusted by <strong className="text-gray-700">500+</strong> e-commerce brands</span>
+              <div className="hidden sm:block w-px h-4 bg-gray-200" />
+              <span><strong className="text-gray-700">$12M+</strong> revenue recovered</span>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Features Section ── */}
+        <section id="features" className="py-20 md:py-28 px-4 md:px-8 bg-white">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-16">
+              <Badge className="mb-4 bg-indigo-100 text-indigo-700 border-indigo-200 px-3 py-1 text-sm">
+                Features
+              </Badge>
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                Everything you need to retain customers
+              </h2>
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                RetainIQ gives your team a complete toolkit to identify churn risks early
+                and act on them automatically — before it's too late.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {[
+                {
+                  icon: <Zap className="w-6 h-6 text-indigo-600" />,
+                  title: "AI-Powered Churn Prediction",
+                  description:
+                    "Our machine learning models analyze behavior signals to flag at-risk customers days before they churn, giving you time to act.",
+                },
+                {
+                  icon: <MessageSquare className="w-6 h-6 text-indigo-600" />,
+                  title: "Personalized Win-Back Campaigns",
+                  description:
+                    "Automatically send hyper-personalized emails, SMS, and push notifications tailored to each customer's history and preferences.",
+                },
+                {
+                  icon: <BarChart3 className="w-6 h-6 text-indigo-600" />,
+                  title: "Retention Analytics Dashboard",
+                  description:
+                    "Track churn rate, LTV trends, campaign performance, and revenue impact in one unified, real-time dashboard.",
+                },
+                {
+                  icon: <Users className="w-6 h-6 text-indigo-600" />,
+                  title: "Customer Segmentation",
+                  description:
+                    "Group customers by risk level, purchase frequency, product affinity, and more to deliver the right message at the right time.",
+                },
+                {
+                  icon: <TrendingUp className="w-6 h-6 text-indigo-600" />,
+                  title: "LTV Optimization",
+                  description:
+                    "Identify your highest-value customers and create loyalty programs that keep them engaged and spending more over time.",
+                },
+                {
+                  icon: <CheckCircle className="w-6 h-6 text-indigo-600" />,
+                  title: "One-Click Integrations",
+                  description:
+                    "Connect with Shopify, WooCommerce, Klaviyo, Stripe, and 50+ other platforms in minutes — no engineering required.",
+                },
+              ].map((feature, idx) => (
+                <Card key={idx} className="border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-200">
                   <CardHeader className="pb-3">
-                    <div className="h-12 w-12 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mb-4 group-hover:bg-violet-500/20 transition-colors">
-                      {f.icon}
+                    <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center mb-4">
+                      {feature.icon}
                     </div>
-                    <div className="text-xs text-violet-400 font-medium uppercase tracking-wider mb-1">
-                      {f.title}
-                    </div>
-                    <CardTitle className="text-base md:text-lg font-bold text-white leading-snug">
-                      {f.headline}
+                    <CardTitle className="text-lg font-semibold text-gray-900">
+                      {feature.title}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-gray-400 text-sm leading-relaxed">{f.description}</p>
+                    <p className="text-gray-600 text-sm leading-relaxed">{feature.description}</p>
                   </CardContent>
                 </Card>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Feature highlights row */}
-          <motion.div
-            {...fadeUp}
-            className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4"
-          >
-            {[
-              { icon: <Bell className="h-4 w-4" />, label: "Real-time alerts" },
-              { icon: <Users className="h-4 w-4" />, label: "CSM workflow sync" },
-              { icon: <Target className="h-4 w-4" />, label: "Segmentation engine" },
-              { icon: <BarChart3 className="h-4 w-4" />, label: "Revenue analytics" },
-            ].map((item, i) => (
-              <div
-                key={item.label}
-                className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3"
-              >
-                <div className="text-violet-400">{item.icon}</div>
-                <span className="text-sm text-gray-300">{item.label}</span>
-              </div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ── PRICING ── */}
-      <section id="pricing" className="px-4 md:px-8 lg:px-16 py-20 md:py-28">
-        <div className="mx-auto max-w-6xl">
-          <motion.div {...fadeUp} className="text-center mb-14">
-            <Badge className="mb-4 bg-violet-500/10 text-violet-400 border border-violet-500/20 px-3 py-1 text-xs rounded-full">
-              Simple Pricing
-            </Badge>
-            <h2 className="text-2xl md:text-4xl font-bold mb-4">
-              Predictable Pricing.{" "}
-              <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
-                No Surprises.
-              </span>
-            </h2>
-            <p className="text-gray-400 max-w-xl mx-auto text-base md:text-lg">
-              From $100 to $500/month—a fraction of what enterprise solutions charge. Every plan includes a 14-day free
-              trial with no credit card required.
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-            {pricingPlans.map((plan, i) => (
-              <motion.div key={plan.name} {...stagger(i)} className="flex">
-                <Card
-                  className={`flex flex-col w-full rounded-2xl transition-all duration-300 ${
-                    plan.highlighted
-                      ? "bg-violet-600/20 border-2 border-violet-500 shadow-xl shadow-violet-900/30 scale-[1.02]"
-                      : "bg-white/[0.03] border border-white/10 hover:border-white/20"
-                  }`}
-                >
-                  {plan.highlighted && (
-                    <div className="text-center pt-4">
-                      <Badge className="bg-violet-500 text-white text-xs px-3 py-0.5 rounded-full font-semibold">
-                        Most Popular
-                      </Badge>
-                    </div>
-                  )}
-                  <CardHeader className={`pb-4 ${plan.highlighted ? "pt-3" : "pt-6"}`}>
-                    <CardTitle className="text-lg font-bold text-white">{plan.name}</CardTitle>
-                    <div className="flex items-end gap-1 mt-2">
-                      <span className="text-4xl font-extrabold text-white">{plan.price}</span>
-                      <span className="text-gray-400 text-sm mb-1.5">{plan.period}</span>
-                    </div>
-                    <p className="text-gray-400 text-sm mt-2 leading-relaxed">{plan.description}</p>
-                  </CardHeader>
-                  <CardContent className="flex flex-col flex-1 gap-4">
-                    <ul className="flex flex-col gap-3 flex-1">
-                      {plan.features.map((feature) => (
-                        <li key={feature} className="flex items-start gap-2.5">
-                          <CheckCircle className="h-4 w-4 text-violet-400 mt-0.5 shrink-0" />
-                          <span className="text-gray-300 text-sm">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="pt-4">
-                      <SignedOut>
-                        <SignInButton mode="modal">
-                          <Button
-                            className={`w-full h-11 font-semibold rounded-xl ${
-                              plan.highlighted
-                                ? "bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-900/40"
-                                : "bg-white/10 hover:bg-white/20 text-white border border-white/10"
-                            }`}
-                          >
-                            {plan.cta}
-                            <ChevronRight className="ml-1 h-4 w-4" />
-                          </Button>
-                        </SignInButton>
-                      </SignedOut>
-                      <SignedIn>
-                        <Link to="/dashboard">
-                          <Button
-                            className={`w-full h-11 font-semibold rounded-xl ${
-                              plan.highlighted
-                                ? "bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-900/40"
-                                : "bg-white/10 hover:bg-white/20 text-white border border-white/10"
-                            }`}
-                          >
-                            Go to Dashboard
-                            <ChevronRight className="ml-1 h-4 w-4" />
-                          </Button>
-                        </Link>
-                      </SignedIn>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
-
-          <motion.p {...fadeUp} className="text-center text-sm text-gray-500 mt-8">
-            All plans include 14-day free trial · No credit card required · Cancel anytime · Annual billing saves 20%
-          </motion.p>
-        </div>
-      </section>
-
-      {/* ── FINAL CTA ── */}
-      <section className="px-4 md:px-8 lg:px-16 py-20 md:py-28 bg-white/[0.02] border-t border-white/10">
-        <div className="mx-auto max-w-3xl text-center">
-          <motion.div {...fadeUp}>
-            <div className="inline-flex items-center gap-2 rounded-full bg-violet-500/10 border border-violet-500/20 px-4 py-2 text-sm text-violet-400 mb-8">
-              <Shield className="h-4 w-4" />
-              Your MRR deserves protection
+              ))}
             </div>
-            <h2 className="text-2xl md:text-4xl lg:text-5xl font-extrabold mb-6 leading-tight">
-              Get a Free 14-Day Trial.{" "}
-              <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
-                Save Your First Customer This Week.
-              </span>
+          </div>
+        </section>
+
+        {/* ── Social Proof / Stats ── */}
+        <section className="py-16 md:py-20 px-4 md:px-8 bg-indigo-600">
+          <div className="max-w-7xl mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 text-center text-white">
+              {[
+                { stat: "35%", label: "Average reduction in churn rate" },
+                { stat: "4.2×", label: "Return on investment in year one" },
+                { stat: "48h", label: "Average setup time to first campaign" },
+              ].map((item, idx) => (
+                <div key={idx} className="flex flex-col items-center">
+                  <span className="text-4xl md:text-5xl font-bold mb-2">{item.stat}</span>
+                  <span className="text-indigo-200 text-sm md:text-base">{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Pricing Section ── */}
+        <section id="pricing" className="py-20 md:py-28 px-4 md:px-8 bg-gray-50">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-16">
+              <Badge className="mb-4 bg-indigo-100 text-indigo-700 border-indigo-200 px-3 py-1 text-sm">
+                Pricing
+              </Badge>
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                Simple, transparent pricing
+              </h2>
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                Choose the plan that fits your business. Upgrade or downgrade at any time.
+                All plans include a 14-day free trial.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+              {/* Starter */}
+              <Card className="border border-gray-200 shadow-sm bg-white">
+                <CardHeader className="pb-4">
+                  <div className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Starter</div>
+                  <div className="flex items-end gap-1">
+                    <span className="text-4xl font-bold text-gray-900">$49</span>
+                    <span className="text-gray-500 mb-1">/month</span>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Perfect for small stores just getting started with retention.
+                  </p>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <ul className="space-y-3">
+                    {[
+                      "Up to 1,000 customers",
+                      "Churn prediction alerts",
+                      "Email win-back campaigns",
+                      "Basic analytics dashboard",
+                      "2 integrations",
+                      "Email support",
+                    ].map((feature, idx) => (
+                      <li key={idx} className="flex items-center gap-2 text-sm text-gray-700">
+                        <CheckCircle className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                  <SignInButton mode="modal">
+                    <Button variant="outline" className="w-full h-10 mt-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50">
+                      Start Free Trial
+                    </Button>
+                  </SignInButton>
+                </CardContent>
+              </Card>
+
+              {/* Growth — highlighted */}
+              <Card className="border-2 border-indigo-600 shadow-lg bg-white relative">
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                  <Badge className="bg-indigo-600 text-white px-4 py-1 text-sm font-semibold shadow">
+                    Most Popular
+                  </Badge>
+                </div>
+                <CardHeader className="pb-4 pt-8">
+                  <div className="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-2">Growth</div>
+                  <div className="flex items-end gap-1">
+                    <span className="text-4xl font-bold text-gray-900">$149</span>
+                    <span className="text-gray-500 mb-1">/month</span>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    For scaling brands serious about reducing churn and growing LTV.
+                  </p>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <ul className="space-y-3">
+                    {[
+                      "Up to 10,000 customers",
+                      "Advanced AI churn prediction",
+                      "Email, SMS & push campaigns",
+                      "Customer segmentation",
+                      "Full analytics & LTV reports",
+                      "20 integrations",
+                      "Priority email & chat support",
+                    ].map((feature, idx) => (
+                      <li key={idx} className="flex items-center gap-2 text-sm text-gray-700">
+                        <CheckCircle className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                  <SignInButton mode="modal">
+                    <Button className="w-full h-10 mt-2 bg-indigo-600 hover:bg-indigo-700 text-white">
+                      Start Free Trial
+                    </Button>
+                  </SignInButton>
+                </CardContent>
+              </Card>
+
+              {/* Enterprise */}
+              <Card className="border border-gray-200 shadow-sm bg-white">
+                <CardHeader className="pb-4">
+                  <div className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Enterprise</div>
+                  <div className="flex items-end gap-1">
+                    <span className="text-4xl font-bold text-gray-900">$399</span>
+                    <span className="text-gray-500 mb-1">/month</span>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    For high-volume merchants and agencies managing multiple brands.
+                  </p>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <ul className="space-y-3">
+                    {[
+                      "Unlimited customers",
+                      "Custom AI model training",
+                      "All campaign channels",
+                      "Advanced segmentation & A/B tests",
+                      "White-glove onboarding",
+                      "Unlimited integrations",
+                      "Dedicated account manager",
+                      "SLA & SSO support",
+                    ].map((feature, idx) => (
+                      <li key={idx} className="flex items-center gap-2 text-sm text-gray-700">
+                        <CheckCircle className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                  <SignInButton mode="modal">
+                    <Button variant="outline" className="w-full h-10 mt-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50">
+                      Start Free Trial
+                    </Button>
+                  </SignInButton>
+                </CardContent>
+              </Card>
+            </div>
+
+            <p className="text-center text-sm text-gray-500 mt-8">
+              All plans include a 14-day free trial. No credit card required to start.
+            </p>
+          </div>
+        </section>
+
+        {/* ── CTA Section ── */}
+        <section className="py-20 md:py-28 px-4 md:px-8 bg-gradient-to-br from-indigo-600 to-purple-700">
+          <div className="max-w-4xl mx-auto text-center text-white">
+            <h2 className="text-3xl md:text-5xl font-bold mb-6">
+              Ready to stop losing customers?
             </h2>
-            <p className="text-gray-400 text-base md:text-lg mb-10 max-w-xl mx-auto leading-relaxed">
-              Join SaaS teams already using RetainIQ to spot churn risk early, automate retention outreach, and protect
-              revenue—without blowing their budget on enterprise tooling.
+            <p className="text-lg md:text-xl text-indigo-100 mb-10 max-w-2xl mx-auto">
+              Join 500+ e-commerce brands using RetainIQ to reduce churn and unlock hidden revenue.
+              Start your free 14-day trial today — no credit card needed.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <SignedOut>
-                <SignInButton mode="modal">
-                  <Button
-                    size="lg"
-                    className="h-12 px-8 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-base rounded-xl shadow-lg shadow-violet-900/40"
-                  >
-                    Get a Free 14-Day Trial
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </SignInButton>
-              </SignedOut>
-              <SignedIn>
+              {isAuthenticated ? (
                 <Link to="/dashboard">
-                  <Button
-                    size="lg"
-                    className="h-12 px-8 bg-violet-600 hover:bg-violet-700 text-white font-semibold text-base rounded-xl shadow-lg shadow-violet-900/40"
-                  >
+                  <Button size="lg" className="w-full sm:w-auto h-12 px-8 bg-white text-indigo-600 hover:bg-indigo-50 font-semibold text-base">
                     Go to Dashboard
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    <ArrowRight className="ml-2 w-5 h-5" />
                   </Button>
                 </Link>
-              </SignedIn>
-              <a href="#pricing">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="h-12 px-8 border-white/20 text-gray-300 hover:text-white hover:bg-white/5 text-base rounded-xl"
-                >
-                  View Pricing Plans
-                </Button>
-              </a>
+              ) : (
+                <>
+                  <SignInButton mode="modal">
+                    <Button size="lg" className="w-full sm:w-auto h-12 px-8 bg-white text-indigo-600 hover:bg-indigo-50 font-semibold text-base">
+                      Start Free Trial
+                      <ArrowRight className="ml-2 w-5 h-5" />
+                    </Button>
+                  </SignInButton>
+                  <SignInButton mode="modal">
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="w-full sm:w-auto h-12 px-8 border-white text-white hover:bg-white/10 font-semibold text-base bg-transparent"
+                    >
+                      Schedule a Demo
+                    </Button>
+                  </SignInButton>
+                </>
+              )}
             </div>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-500">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle className="h-3.5 w-3.5 text-emerald-500" /> No credit card required
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle className="h-3.5 w-3.5 text-emerald-500" /> 14-day full access
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle className="h-3.5 w-3.5 text-emerald-500" /> Cancel anytime
-              </span>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ── FOOTER ── */}
-      <footer className="border-t border-white/10 px-4 md:px-8 lg:px-16 py-10">
-        <div className="mx-auto max-w-7xl flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600">
-              <BarChart3 className="h-3.5 w-3.5 text-white" />
-            </div>
-            <span className="font-bold text-white">RetainIQ</span>
-            <span className="text-gray-500 text-sm ml-2">Affordable Churn Prevention for Growing SaaS Startups</span>
           </div>
-          <div className="flex items-center gap-6 text-sm text-gray-500">
-            <a href="#features" className="hover:text-gray-300 transition-colors">
-              Features
-            </a>
-            <a href="#pricing" className="hover:text-gray-300 transition-colors">
-              Pricing
-            </a>
-            <span>© {new Date().getFullYear()} RetainIQ. All rights reserved.</span>
+        </section>
+      </main>
+
+      {/* ── Footer ── */}
+      <footer className="bg-gray-900 text-gray-400 py-12 px-4 md:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            {/* Brand */}
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4 text-white" />
+              </div>
+              <span className="text-lg font-bold text-white">RetainIQ</span>
+            </div>
+
+            {/* Links */}
+            <nav className="flex flex-wrap justify-center gap-6 text-sm">
+              <a href="#features" className="hover:text-white transition-colors">
+                Features
+              </a>
+              <a href="#pricing" className="hover:text-white transition-colors">
+                Pricing
+              </a>
+              <Link to="/dashboard" className="hover:text-white transition-colors">
+                Dashboard
+              </Link>
+            </nav>
+
+            {/* Copyright */}
+            <p className="text-sm text-center md:text-right">
+              © {new Date().getFullYear()} RetainIQ. All rights reserved.
+            </p>
           </div>
         </div>
       </footer>
     </div>
   );
 }
+// END_OF_FILE
