@@ -458,4 +458,10 @@ export default function Pricing() {
             </a>
           </div>
           <p className="mt-5 text-xs text-primary-foreground/60">
-            No credit card required •
+            No credit card required • Cancel anytime • GDPR compliant
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}
