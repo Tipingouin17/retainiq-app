@@ -1,0 +1,32 @@
+{
+  "build_command": "pnpm run build",
+  "capabilities": [
+    "server",
+    "db",
+    "user"
+  ],
+  "dev_command": "pnpm run dev",
+  "env_vars": {},
+  "experiments": [
+    "no_db_push",
+    "references_readme"
+  ],
+  "name": "aibce-saas-template",
+  "port": 3000,
+  "secrets": {
+    "BUILT_IN_FORGE_API_KEY": "YWyojYPTeKiiQQoMD9jLdR",
+    "BUILT_IN_FORGE_API_URL": "https://forge.manus.ai",
+    "JWT_SECRET": "7FPvTmv5XsjWaDJYbmZBWt",
+    "OAUTH_SERVER_URL": "https://api.manus.im",
+    "OWNER_NAME": "Jérôme Gauvin",
+    "OWNER_OPEN_ID": "TgbGokWoFa4mmnQcpGbkZL",
+    "VITE_ANALYTICS_ENDPOINT": "https://manus-analytics.com",
+    "VITE_ANALYTICS_WEBSITE_ID": "378bd5aa-698a-4c6f-83a7-19c656de3870",
+    "VITE_APP_ID": "2tTaC33srHGhN9c4UFmfoG",
+    "VITE_FRONTEND_FORGE_API_KEY": "2BVjp5jGeQqxb7pXv9nGtf",
+    "VITE_FRONTEND_FORGE_API_URL": "https://forge.manus.ai",
+    "VITE_OAUTH_PORTAL_URL": "https://manus.im"
+  },
+  "template_id": "web-db-user",
+  "test_command": "pnpm test"
+}
