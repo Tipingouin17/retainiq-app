@@ -588,7 +588,8 @@ export async function markChurnPredictionActioned(
   const [updated] = await db
     .update(churnPredictions)
     .set({ isActioned: true, actionedAt: new Date() })
-  ])
+    .where(eq(churnPredictions.id, id))
+    .returning();
   .where(eq(churnPredictions.id, id));
 
   return updated;
