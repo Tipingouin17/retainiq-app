@@ -533,3 +533,10 @@ export async function getCustomerLoginCountSince(
       and(
         eq(customerEvents.customerId, customerId),
         eq(customerEvents.userId, userId),
+        gte(customerEvents.occurredAt, since)
+      )
+    )
+    .limit(1);
+
+  return result[0]?.count ?? 0;
+}
