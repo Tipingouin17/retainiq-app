@@ -853,6 +853,103 @@ export const appRouter = router({
         z.object({
           id: z.number(),
           ruleName: z.string().min(1).optional(),
+          description: z.string().optional(),
+          weight: z.string().optional(),
+          isEnabled: z.boolean().optional(),
+          config: z.record(z.unknown()).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        const { id, ...rest } = input;
+        const result = await db!
+          .update(scoringRules)
+          .set({ ...rest, updatedAt: new Date() })
+          .where(
+            and(eq(scoringRules.id, id), eq(scoringRules.userId, ctx.user.id))
+          )
+          .returning();
+        if (!result[0]) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Scoring rule not found' });
+        }
+        return result[0];
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        const result = await db!
+          .delete(scoringRules)
+          .where(
+            and(eq(scoringRules.id, input.id), eq(scoringRules.userId, ctx.user.id))
+          )
+          .returning();
+        if (!result[0]) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Scoring rule not found' });
+        }
+        return result[0];
+      }),
+  }),
+
+  integrations: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      return db!
+        .select()
+        .from(integrations)
+        .where(eq(integrations.userId, ctx.user.id))
+        .orderBy(desc(integrations.createdAt));
+    }),
+
+    create: protectedProcedure
+      .input(
+        z.object({
+          name: z.string().min(1),
+          type: z.string().min(1),
+          apiKey: z.string().optional(),
+          webhookUrl: z.string().optional(),
+          config: z.record(z.unknown()).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        const result = await db!
+          .insert(integrations)
+          .values({
+            userId: ctx.user.id,
+            name: input.name,
+            type: input.type,
+            apiKey: input.apiKey,
+            webhookUrl: input.webhookUrl,
+            config: input.config,
+          })
+          .returning();
+        return result[0];
+      }),
+
+    update: protectedProcedure
+      .input(
+        z.object({
+          id: z.string(),
+          name: z.string().min(1).optional(),
+          apiKey: z.string().optional(),
+          webhookUrl: z.string().optional(),
+          config: z.record(z.unknown()).optional(),
+          isActive: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        const { id, ...rest } = input;
+        const result = await db!
+          .update(integrations)
+          .set({ ...rest, updatedAt: new Date() })
+          .where(
+            and(eq(integrations.id, id), eq(integrations.userId, ctx.user.id))
+          )
+          .returning();
+        if (!result[0]) {
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Integration not found' });
         }
         return result[0];
