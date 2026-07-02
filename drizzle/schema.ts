@@ -323,3 +323,37 @@ export const alertRules = pgTable("alert_rules", {
   conditionType: varchar("conditionType", { length: 100 }).notNull(),
   conditionOperator: varchar("conditionOperator", { length: 50 }).notNull(),
   conditionValue: varchar("conditionValue", { length: 255 }).not
+null().notNull(),
+  notificationChannels: varchar("notificationChannels", { length: 255 }).default("email").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── Subscriptions ────────────────────────────────────────────────────────────
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }),
+  stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
+  stripePriceId: varchar("stripePriceId", { length: 255 }),
+  status: varchar("status", { length: 50 }).default("inactive").notNull(),
+  currentPeriodStart: timestamp("currentPeriodStart"),
+  currentPeriodEnd: timestamp("currentPeriodEnd"),
+  cancelAtPeriodEnd: boolean("cancelAtPeriodEnd").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+// ─── Type exports ─────────────────────────────────────────────────────────────
+export type Customer = typeof customers.$inferSelect;
+export type NewCustomer = typeof customers.$inferInsert;
+export type CustomerHealthScore = typeof customerHealthScores.$inferSelect;
+export type CustomerEvent = typeof customerEvents.$inferSelect;
+export type ChurnPrediction = typeof churnPredictions.$inferSelect;
+export type Playbook = typeof playbooks.$inferSelect;
+export type PlaybookStep = typeof playbookSteps.$inferSelect;
+export type PlaybookRun = typeof playbookRuns.$inferSelect;
+export type CustomerSegment = typeof customerSegments.$inferSelect;
+export type Alert = typeof alerts.$inferSelect;
+export type AlertRule = typeof alertRules.$inferSelect;
+export type Subscription = typeof subscriptions.$inferSelect;
