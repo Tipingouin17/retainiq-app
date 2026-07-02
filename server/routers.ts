@@ -34,105 +34,34 @@ export const appRouter = router({
     }),
   }),
 
-  // Subscription / payments
-  payments: router({
-    getSubscription: protectedProcedure.query(async ({ ctx }) => {
-      const db = await getDb();
-      const rows = await db!
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.userId, ctx.user.id))
-        .orderBy(desc(subscriptions.createdAt))
-        .limit(1);
-      return rows[0] ?? null;
-    }),
-
-    createCheckout: protectedProcedure
-      .input(z.object({ priceId: z.string() }))
-      .mutation(async ({ ctx, input }) => {
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-        const session = await stripe.checkout.sessions.create({
-          customer_email: ctx.user.email!,
-          line_items: [{ price: input.priceId, quantity: 1 }],
-          mode: "subscription",
-          success_url: `${process.env.VITE_APP_URL || "https://example.aibce.io"}/dashboard?success=true`,
-          cancel_url: `${process.env.VITE_APP_URL || "https://example.aibce.io"}/pricing`,
-        });
-        return { url: session.url };
-      }),
-
-    createPortalSession: protectedProcedure.mutation(async ({ ctx }) => {
-      const db = await getDb();
-      const rows = await db!
-        .select()
-        .from(subscriptions)
-        .where(eq(subscriptions.userId, ctx.user.id))
-        .limit(1);
-      const sub = rows[0];
-      if (!sub?.stripeCustomerId) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "No subscription found" });
-      }
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-      const session = await stripe.billingPortal.sessions.create({
-        customer: sub.stripeCustomerId,
-        return_url: `${process.env.VITE_APP_URL || "https://example.aibce.io"}/dashboard`,
-      });
-      return { url: session.url };
-    }),
-  }),
-
   // Customers
   customers: router({
-    list: protectedProcedure
-      .input(
-        z
-          .object({
-            healthStatus: z
-              .enum(["healthy", "at_risk", "critical", "churned"])
-              .optional(),
-            limit: z.number().min(1).max(200).optional().default(50),
-            offset: z.number().min(0).optional().default(0),
-          })
-          .optional()
-      )
-      .query(async ({ ctx, input }) => {
-        const db = await getDb();
-        const conditions = [eq(customers.userId, ctx.user.id)];
-        if (input?.healthStatus) {
-          conditions.push(eq(customers.healthStatus, input.healthStatus));
-        }
-        const rows = await db!
-          .select()
-          .from(customers)
-          .where(and(...conditions))
-          .orderBy(desc(customers.createdAt))
-          .limit(input?.limit ?? 50)
-          .offset(input?.offset ?? 0);
-        return rows;
-      }),
-
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      return db!
+        .select()
+        .from(customers)
+        .where(eq(customers.userId, ctx.user.id))
+        .orderBy(desc(customers.createdAt));
+    }),
     get: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ ctx, input }) => {
         const db = await getDb();
-        const rows = await db!
+        const result = await db!
           .select()
           .from(customers)
-          .where(and(eq(customers.id, input.id), eq(customers.userId, ctx.user.id)))
-          .limit(1);
-        if (!rows[0]) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
-        }
-        return rows[0];
+          .where(and(eq(customers.id, input.id), eq(customers.userId, ctx.user.id)));
+        if (!result[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
+        return result[0];
       }),
-
     create: protectedProcedure
       .input(
         z.object({
           name: z.string().min(1),
           email: z.string().email(),
           companyName: z.string().optional(),
-          mrr: z.string().optional().default("0"),
+          mrr: z.string().optional(),
           plan: z.string().optional(),
           notes: z.string().optional(),
           tags: z.string().optional(),
@@ -157,7 +86,6 @@ export const appRouter = router({
           .returning();
         return result[0];
       }),
-
     update: protectedProcedure
       .input(
         z.object({
@@ -167,28 +95,24 @@ export const appRouter = router({
           companyName: z.string().optional(),
           mrr: z.string().optional(),
           plan: z.string().optional(),
-          healthStatus: z
-            .enum(["healthy", "at_risk", "critical", "churned"])
-            .optional(),
-          healthScore: z.number().min(0).max(100).optional(),
+          healthScore: z.number().optional(),
+          healthStatus: z.enum(["healthy", "at_risk", "critical", "churned"]).optional(),
+          churnProbability: z.string().optional(),
           notes: z.string().optional(),
           tags: z.string().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
-        const { id, ...rest } = input;
+        const { id, ...updates } = input;
         const result = await db!
           .update(customers)
-          .set({ ...rest, updatedAt: new Date() })
+          .set({ ...updates, updatedAt: new Date() })
           .where(and(eq(customers.id, id), eq(customers.userId, ctx.user.id)))
           .returning();
-        if (!result[0]) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
-        }
+        if (!result[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
         return result[0];
       }),
-
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -211,13 +135,12 @@ export const appRouter = router({
           .from(healthScoreFactors)
           .where(
             and(
-              eq(healthScoreFactors.userId, ctx.user.id),
-              eq(healthScoreFactors.customerId, input.customerId)
+              eq(healthScoreFactors.customerId, input.customerId),
+              eq(healthScoreFactors.userId, ctx.user.id)
             )
           )
           .orderBy(desc(healthScoreFactors.scoredAt));
       }),
-
     create: protectedProcedure
       .input(
         z.object({
@@ -234,7 +157,7 @@ export const appRouter = router({
           ]),
           factorName: z.string().min(1),
           value: z.string(),
-          weight: z.string().optional().default("1"),
+          weight: z.string().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -252,7 +175,6 @@ export const appRouter = router({
           .returning();
         return result[0];
       }),
-
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -272,12 +194,7 @@ export const appRouter = router({
   // Health Score History
   healthScoreHistory: router({
     list: protectedProcedure
-      .input(
-        z.object({
-          customerId: z.number(),
-          limit: z.number().min(1).max(100).optional().default(30),
-        })
-      )
+      .input(z.object({ customerId: z.number() }))
       .query(async ({ ctx, input }) => {
         const db = await getDb();
         return db!
@@ -285,12 +202,34 @@ export const appRouter = router({
           .from(healthScoreHistory)
           .where(
             and(
-              eq(healthScoreHistory.userId, ctx.user.id),
-              eq(healthScoreHistory.customerId, input.customerId)
+              eq(healthScoreHistory.customerId, input.customerId),
+              eq(healthScoreHistory.userId, ctx.user.id)
             )
           )
-          .orderBy(desc(healthScoreHistory.snapshotAt))
-          .limit(input.limit);
+          .orderBy(desc(healthScoreHistory.snapshotAt));
+      }),
+    create: protectedProcedure
+      .input(
+        z.object({
+          customerId: z.number(),
+          healthScore: z.number(),
+          healthStatus: z.enum(["healthy", "at_risk", "critical", "churned"]),
+          churnProbability: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        const result = await db!
+          .insert(healthScoreHistory)
+          .values({
+            userId: ctx.user.id,
+            customerId: input.customerId,
+            healthScore: input.healthScore,
+            healthStatus: input.healthStatus,
+            churnProbability: input.churnProbability ?? "0",
+          })
+          .returning();
+        return result[0];
       }),
   }),
 
@@ -304,22 +243,17 @@ export const appRouter = router({
         .where(eq(playbooks.userId, ctx.user.id))
         .orderBy(desc(playbooks.createdAt));
     }),
-
     get: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ ctx, input }) => {
         const db = await getDb();
-        const rows = await db!
+        const result = await db!
           .select()
           .from(playbooks)
-          .where(and(eq(playbooks.id, input.id), eq(playbooks.userId, ctx.user.id)))
-          .limit(1);
-        if (!rows[0]) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Playbook not found" });
-        }
-        return rows[0];
+          .where(and(eq(playbooks.id, input.id), eq(playbooks.userId, ctx.user.id)));
+        if (!result[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Playbook not found" });
+        return result[0];
       }),
-
     create: protectedProcedure
       .input(
         z.object({
@@ -336,6 +270,7 @@ export const appRouter = router({
             "custom_event",
           ]),
           triggerThreshold: z.string().optional(),
+          status: z.enum(["active", "paused", "archived", "draft"]).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -348,35 +283,44 @@ export const appRouter = router({
             description: input.description,
             triggerType: input.triggerType,
             triggerThreshold: input.triggerThreshold,
+            status: input.status ?? "draft",
           })
           .returning();
         return result[0];
       }),
-
     update: protectedProcedure
       .input(
         z.object({
           id: z.number(),
           name: z.string().min(1).optional(),
           description: z.string().optional(),
-          status: z.enum(["active", "paused", "archived", "draft"]).optional(),
+          triggerType: z
+            .enum([
+              "health_score_drops_below",
+              "health_score_rises_above",
+              "churn_probability_exceeds",
+              "no_login_for_days",
+              "mrr_drops",
+              "trial_ending_soon",
+              "manual",
+              "custom_event",
+            ])
+            .optional(),
           triggerThreshold: z.string().optional(),
+          status: z.enum(["active", "paused", "archived", "draft"]).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
-        const { id, ...rest } = input;
+        const { id, ...updates } = input;
         const result = await db!
           .update(playbooks)
-          .set({ ...rest, updatedAt: new Date() })
+          .set({ ...updates, updatedAt: new Date() })
           .where(and(eq(playbooks.id, id), eq(playbooks.userId, ctx.user.id)))
           .returning();
-        if (!result[0]) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Playbook not found" });
-        }
+        if (!result[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Playbook not found" });
         return result[0];
       }),
-
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -399,18 +343,17 @@ export const appRouter = router({
           .from(playbookSteps)
           .where(
             and(
-              eq(playbookSteps.userId, ctx.user.id),
-              eq(playbookSteps.playbookId, input.playbookId)
+              eq(playbookSteps.playbookId, input.playbookId),
+              eq(playbookSteps.userId, ctx.user.id)
             )
           )
           .orderBy(asc(playbookSteps.stepOrder));
       }),
-
     create: protectedProcedure
       .input(
         z.object({
           playbookId: z.number(),
-          stepOrder: z.number().optional().default(0),
+          stepOrder: z.number().optional(),
           stepType: z.enum([
             "send_email",
             "create_task",
@@ -422,8 +365,8 @@ export const appRouter = router({
           ]),
           stepName: z.string().min(1),
           config: z.string(),
-          delayDays: z.number().optional().default(0),
-          isEnabled: z.boolean().optional().default(true),
+          delayDays: z.number().optional(),
+          isEnabled: z.boolean().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -433,44 +376,49 @@ export const appRouter = router({
           .values({
             userId: ctx.user.id,
             playbookId: input.playbookId,
-            stepOrder: input.stepOrder,
+            stepOrder: input.stepOrder ?? 0,
             stepType: input.stepType,
             stepName: input.stepName,
             config: input.config,
-            delayDays: input.delayDays,
-            isEnabled: input.isEnabled,
+            delayDays: input.delayDays ?? 0,
+            isEnabled: input.isEnabled ?? true,
           })
           .returning();
         return result[0];
       }),
-
     update: protectedProcedure
       .input(
         z.object({
           id: z.number(),
+          stepOrder: z.number().optional(),
+          stepType: z
+            .enum([
+              "send_email",
+              "create_task",
+              "send_slack_message",
+              "add_tag",
+              "update_health_status",
+              "webhook",
+              "wait_days",
+            ])
+            .optional(),
           stepName: z.string().min(1).optional(),
           config: z.string().optional(),
-          stepOrder: z.number().optional(),
           delayDays: z.number().optional(),
           isEnabled: z.boolean().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
-        const { id, ...rest } = input;
+        const { id, ...updates } = input;
         const result = await db!
           .update(playbookSteps)
-          .set({ ...rest, updatedAt: new Date() })
-          .where(
-            and(eq(playbookSteps.id, id), eq(playbookSteps.userId, ctx.user.id))
-          )
+          .set({ ...updates, updatedAt: new Date() })
+          .where(and(eq(playbookSteps.id, id), eq(playbookSteps.userId, ctx.user.id)))
           .returning();
-        if (!result[0]) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Step not found" });
-        }
+        if (!result[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Step not found" });
         return result[0];
       }),
-
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -487,32 +435,18 @@ export const appRouter = router({
   // Playbook Runs
   playbookRuns: router({
     list: protectedProcedure
-      .input(
-        z
-          .object({
-            playbookId: z.number().optional(),
-            customerId: z.number().optional(),
-            limit: z.number().min(1).max(100).optional().default(20),
-          })
-          .optional()
-      )
+      .input(z.object({ playbookId: z.number().optional(), customerId: z.number().optional() }))
       .query(async ({ ctx, input }) => {
         const db = await getDb();
         const conditions = [eq(playbookRuns.userId, ctx.user.id)];
-        if (input?.playbookId) {
-          conditions.push(eq(playbookRuns.playbookId, input.playbookId));
-        }
-        if (input?.customerId) {
-          conditions.push(eq(playbookRuns.customerId, input.customerId));
-        }
+        if (input.playbookId) conditions.push(eq(playbookRuns.playbookId, input.playbookId));
+        if (input.customerId) conditions.push(eq(playbookRuns.customerId, input.customerId));
         return db!
           .select()
           .from(playbookRuns)
           .where(and(...conditions))
-          .orderBy(desc(playbookRuns.createdAt))
-          .limit(input?.limit ?? 20);
+          .orderBy(desc(playbookRuns.createdAt));
       }),
-
     create: protectedProcedure
       .input(
         z.object({
@@ -529,13 +463,12 @@ export const appRouter = router({
             userId: ctx.user.id,
             playbookId: input.playbookId,
             customerId: input.customerId,
+            status: "pending",
             triggerSnapshot: input.triggerSnapshot,
-            startedAt: new Date(),
           })
           .returning();
         return result[0];
       }),
-
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -552,12 +485,7 @@ export const appRouter = router({
   // Customer Events
   customerEvents: router({
     list: protectedProcedure
-      .input(
-        z.object({
-          customerId: z.number(),
-          limit: z.number().min(1).max(100).optional().default(50),
-        })
-      )
+      .input(z.object({ customerId: z.number() }))
       .query(async ({ ctx, input }) => {
         const db = await getDb();
         return db!
@@ -565,14 +493,12 @@ export const appRouter = router({
           .from(customerEvents)
           .where(
             and(
-              eq(customerEvents.userId, ctx.user.id),
-              eq(customerEvents.customerId, input.customerId)
+              eq(customerEvents.customerId, input.customerId),
+              eq(customerEvents.userId, ctx.user.id)
             )
           )
-          .orderBy(desc(customerEvents.occurredAt))
-          .limit(input.limit);
+          .orderBy(desc(customerEvents.occurredAt));
       }),
-
     create: protectedProcedure
       .input(
         z.object({
@@ -610,7 +536,6 @@ export const appRouter = router({
           .returning();
         return result[0];
       }),
-
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -618,10 +543,7 @@ export const appRouter = router({
         await db!
           .delete(customerEvents)
           .where(
-            and(
-              eq(customerEvents.id, input.id),
-              eq(customerEvents.userId, ctx.user.id)
-            )
+            and(eq(customerEvents.id, input.id), eq(customerEvents.userId, ctx.user.id))
           );
         return { success: true };
       }),
@@ -630,41 +552,27 @@ export const appRouter = router({
   // Tasks
   tasks: router({
     list: protectedProcedure
-      .input(
-        z
-          .object({
-            customerId: z.number().optional(),
-            status: z.enum(["open", "in_progress", "completed", "cancelled"]).optional(),
-            limit: z.number().min(1).max(100).optional().default(50),
-          })
-          .optional()
-      )
+      .input(z.object({ customerId: z.number().optional() }))
       .query(async ({ ctx, input }) => {
         const db = await getDb();
         const conditions = [eq(tasks.userId, ctx.user.id)];
-        if (input?.customerId) {
-          conditions.push(eq(tasks.customerId, input.customerId));
-        }
-        if (input?.status) {
-          conditions.push(eq(tasks.status, input.status));
-        }
+        if (input.customerId) conditions.push(eq(tasks.customerId, input.customerId));
         return db!
           .select()
           .from(tasks)
           .where(and(...conditions))
-          .orderBy(desc(tasks.createdAt))
-          .limit(input?.limit ?? 50);
+          .orderBy(desc(tasks.createdAt));
       }),
-
     create: protectedProcedure
       .input(
         z.object({
           customerId: z.number(),
+          playbookRunId: z.number().optional(),
           title: z.string().min(1),
           description: z.string().optional(),
-          priority: z.enum(["low", "medium", "high", "urgent"]).optional().default("medium"),
+          status: z.enum(["open", "in_progress", "completed", "cancelled"]).optional(),
+          priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
           dueAt: z.date().optional(),
-          playbookRunId: z.number().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -674,16 +582,16 @@ export const appRouter = router({
           .values({
             userId: ctx.user.id,
             customerId: input.customerId,
+            playbookRunId: input.playbookRunId,
             title: input.title,
             description: input.description,
-            priority: input.priority,
+            status: input.status ?? "open",
+            priority: input.priority ?? "medium",
             dueAt: input.dueAt,
-            playbookRunId: input.playbookRunId,
           })
           .returning();
         return result[0];
       }),
-
     update: protectedProcedure
       .input(
         z.object({
@@ -693,24 +601,20 @@ export const appRouter = router({
           status: z.enum(["open", "in_progress", "completed", "cancelled"]).optional(),
           priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
           dueAt: z.date().optional(),
+          completedAt: z.date().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
-        const { id, ...rest } = input;
-        const completedAt =
-          input.status === "completed" ? new Date() : undefined;
+        const { id, ...updates } = input;
         const result = await db!
           .update(tasks)
-          .set({ ...rest, ...(completedAt ? { completedAt } : {}), updatedAt: new Date() })
+          .set({ ...updates, updatedAt: new Date() })
           .where(and(eq(tasks.id, id), eq(tasks.userId, ctx.user.id)))
           .returning();
-        if (!result[0]) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
-        }
+        if (!result[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
         return result[0];
       }),
-
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -726,35 +630,22 @@ export const appRouter = router({
   alerts: router({
     list: protectedProcedure
       .input(
-        z
-          .object({
-            customerId: z.number().optional(),
-            isRead: z.boolean().optional(),
-            isDismissed: z.boolean().optional(),
-            limit: z.number().min(1).max(100).optional().default(50),
-          })
-          .optional()
+        z.object({
+          customerId: z.number().optional(),
+          unreadOnly: z.boolean().optional(),
+        })
       )
       .query(async ({ ctx, input }) => {
         const db = await getDb();
         const conditions = [eq(alerts.userId, ctx.user.id)];
-        if (input?.customerId !== undefined) {
-          conditions.push(eq(alerts.customerId, input.customerId));
-        }
-        if (input?.isRead !== undefined) {
-          conditions.push(eq(alerts.isRead, input.isRead));
-        }
-        if (input?.isDismissed !== undefined) {
-          conditions.push(eq(alerts.isDismissed, input.isDismissed));
-        }
+        if (input.customerId) conditions.push(eq(alerts.customerId, input.customerId));
+        if (input.unreadOnly) conditions.push(eq(alerts.isRead, false));
         return db!
           .select()
           .from(alerts)
           .where(and(...conditions))
-          .orderBy(desc(alerts.createdAt))
-          .limit(input?.limit ?? 50);
+          .orderBy(desc(alerts.createdAt));
       }),
-
     create: protectedProcedure
       .input(
         z.object({
@@ -767,7 +658,7 @@ export const appRouter = router({
             "no_activity",
             "playbook_failed",
           ]),
-          severity: z.enum(["info", "warning", "critical"]).optional().default("warning"),
+          severity: z.enum(["info", "warning", "critical"]).optional(),
           title: z.string().min(1),
           message: z.string().min(1),
         })
@@ -780,14 +671,13 @@ export const appRouter = router({
             userId: ctx.user.id,
             customerId: input.customerId,
             alertType: input.alertType,
-            severity: input.severity,
+            severity: input.severity ?? "warning",
             title: input.title,
             message: input.message,
           })
           .returning();
         return result[0];
       }),
-
     markRead: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -797,12 +687,9 @@ export const appRouter = router({
           .set({ isRead: true, readAt: new Date() })
           .where(and(eq(alerts.id, input.id), eq(alerts.userId, ctx.user.id)))
           .returning();
-        if (!result[0]) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Alert not found" });
-        }
+        if (!result[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Alert not found" });
         return result[0];
       }),
-
     dismiss: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -812,12 +699,9 @@ export const appRouter = router({
           .set({ isDismissed: true, dismissedAt: new Date() })
           .where(and(eq(alerts.id, input.id), eq(alerts.userId, ctx.user.id)))
           .returning();
-        if (!result[0]) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Alert not found" });
-        }
+        if (!result[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Alert not found" });
         return result[0];
       }),
-
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -839,7 +723,6 @@ export const appRouter = router({
         .where(eq(integrations.userId, ctx.user.id))
         .orderBy(desc(integrations.createdAt));
     }),
-
     create: protectedProcedure
       .input(
         z.object({
@@ -854,8 +737,13 @@ export const appRouter = router({
             "zapier",
             "webhook",
           ]),
-          config: z.string().optional(),
+          status: z.enum(["active", "inactive", "error", "pending_auth"]).optional(),
+          accessToken: z.string().optional(),
+          refreshToken: z.string().optional(),
+          tokenExpiresAt: z.date().optional(),
           webhookUrl: z.string().optional(),
+          webhookSecret: z.string().optional(),
+          config: z.string().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -865,33 +753,104 @@ export const appRouter = router({
           .values({
             userId: ctx.user.id,
             provider: input.provider,
-            config: input.config,
+            status: input.status ?? "pending_auth",
+            accessToken: input.accessToken,
+            refreshToken: input.refreshToken,
+            tokenExpiresAt: input.tokenExpiresAt,
             webhookUrl: input.webhookUrl,
+            webhookSecret: input.webhookSecret,
+            config: input.config,
           })
           .returning();
         return result[0];
       }),
-
     update: protectedProcedure
       .input(
         z.object({
           id: z.number(),
-          status: z
-            .enum(["active", "inactive", "error", "pending_auth"])
-            .optional(),
-          config: z.string().optional(),
+          status: z.enum(["active", "inactive", "error", "pending_auth"]).optional(),
+          accessToken: z.string().optional(),
+          refreshToken: z.string().optional(),
+          tokenExpiresAt: z.date().optional(),
           webhookUrl: z.string().optional(),
+          webhookSecret: z.string().optional(),
+          config: z.string().optional(),
+          lastSyncAt: z.date().optional(),
+          errorMessage: z.string().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
-        const { id, ...rest } = input;
+        const { id, ...updates } = input;
         const result = await db!
           .update(integrations)
-          .set({ ...rest, updatedAt: new Date() })
-          .where(
-            and(eq(integrations.id, id), eq(integrations.userId, ctx.user.id))
-          )
+          .set({ ...updates, updatedAt: new Date() })
+          .where(and(eq(integrations.id, id), eq(integrations.userId, ctx.user.id)))
           .returning();
-        if (!result[0]) {
-          throw new TRPCError({ code
+        if (!result[0])
+          throw new TRPCError({ code: "NOT_FOUND", message: "Integration not found" });
+        return result[0];
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        await db!
+          .delete(integrations)
+          .where(and(eq(integrations.id, input.id), eq(integrations.userId, ctx.user.id)));
+        return { success: true };
+      }),
+  }),
+
+  // Scoring Rules
+  scoringRules: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      return db!
+        .select()
+        .from(scoringRules)
+        .where(eq(scoringRules.userId, ctx.user.id))
+        .orderBy(asc(scoringRules.createdAt));
+    }),
+    create: protectedProcedure
+      .input(
+        z.object({
+          factorType: z.enum([
+            "product_usage",
+            "support_tickets",
+            "payment_history",
+            "engagement",
+            "nps",
+            "feature_adoption",
+            "login_frequency",
+            "custom",
+          ]),
+          ruleName: z.string().min(1),
+          description: z.string().optional(),
+          weight: z.string().optional(),
+          isEnabled: z.boolean().optional(),
+          config: z.string(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        const result = await db!
+          .insert(scoringRules)
+          .values({
+            userId: ctx.user.id,
+            factorType: input.factorType,
+            ruleName: input.ruleName,
+            description: input.description,
+            weight: input.weight ?? "1",
+            isEnabled: input.isEnabled ?? true,
+            config: input.config,
+          })
+          .returning();
+        return result[0];
+      }),
+    update: protectedProcedure
+      .input(
+        z.object({
+          id: z.number(),
+          ruleName: z.string().min(1).optional(),
+          description: z.string
