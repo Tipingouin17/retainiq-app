@@ -3,37 +3,23 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "./db";
-import { eq, and, desc, asc, gte, lte, sql, count, avg, isNull, isNotNull, or, ne } from "drizzle-orm";
+import { eq, and, desc, asc, gte, lte, sql, count, avg } from "drizzle-orm";
 import Stripe from "stripe";
 import {
   subscriptions,
   customers,
-  healthScoreConfigs,
+  healthScoreFactors,
   healthScoreHistory,
-  customerEvents,
-  features,
-  customerFeatureUsage,
   playbooks,
   playbookSteps,
-  playbookExecutions,
-  playbookStepExecutions,
+  playbookRuns,
+  playbookStepRuns,
+  customerEvents,
   tasks,
   alerts,
+  integrations,
+  scoringRules,
 } from "../drizzle/schema";
-
-// ─── Auth Router ──────────────────────────────────────────────────────────────
-const authRouter = router({
-  me: protectedProcedure.query(async ({ ctx }) => {
-    return {
-      id: ctx.user.id,
-      email: ctx.user.email,
-      name: ctx.user.name,
-    };
-  }),
-  logout: protectedProcedure.mutation(async () => {
-    return { success: true };
-  }),
-});
 
 // ─── Stripe Payments Router ───────────────────────────────────────────────────
 const paymentsRouter = router({
@@ -91,40 +77,39 @@ const customerRouter = router({
         page: z.number().int().positive().default(1),
         pageSize: z.number().int().positive().max(100).default(20),
         healthStatus: z.enum(["healthy", "at_risk", "critical", "churned"]).optional(),
-        churnRiskLevel: z.enum(["low", "medium", "high", "very_high"]).optional(),
         search: z.string().optional(),
-        sortBy: z.enum(["createdAt", "healthScore", "mrr", "lastActivityAt"]).default("createdAt"),
+        sortBy: z.enum(["createdAt", "mrr", "healthScore", "name"]).default("createdAt"),
         sortOrder: z.enum(["asc", "desc"]).default("desc"),
-      })
+      }).default({})
     )
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
-      const { page, pageSize, healthStatus, churnRiskLevel, search } = input;
+      const { page, pageSize, healthStatus, search, sortBy, sortOrder } = input;
       const offset = (page - 1) * pageSize;
 
-      const conditions = [eq(customers.userId, ctx.user.id), eq(customers.isActive, true)];
-
+      const conditions = [eq(customers.userId, ctx.user.id)];
       if (healthStatus) {
         conditions.push(eq(customers.healthStatus, healthStatus));
       }
-      if (churnRiskLevel) {
-        conditions.push(eq(customers.churnRiskLevel, churnRiskLevel));
+      if (search) {
+        conditions.push(
+          sql`(${customers.name} ILIKE ${"%" + search + "%"} OR ${customers.email} ILIKE ${"%" + search + "%"} OR ${customers.companyName} ILIKE ${"%" + search + "%"})`
+        );
       }
 
-      const sortColumn =
-        input.sortBy === "healthScore"
-          ? customers.healthScore
-          : input.sortBy === "mrr"
+      const orderCol =
+        sortBy === "mrr"
           ? customers.mrr
-          : input.sortBy === "lastActivityAt"
-          ? customers.lastActivityAt
+          : sortBy === "healthScore"
+          ? customers.healthScore
+          : sortBy === "name"
+          ? customers.name
           : customers.createdAt;
 
-      const orderFn = input.sortOrder === "asc" ? asc(sortColumn) : desc(sortColumn);
+      const orderFn = sortOrder === "asc" ? asc(orderCol) : desc(orderCol);
 
-      const [rows, totalRows] = await Promise.all([
+      const [rows, totalResult] = await Promise.all([
         db
           .select()
           .from(customers)
@@ -138,18 +123,9 @@ const customerRouter = router({
           .where(and(...conditions)),
       ]);
 
-      const filteredRows = search
-        ? rows.filter(
-            (c) =>
-              c.name.toLowerCase().includes(search.toLowerCase()) ||
-              c.email.toLowerCase().includes(search.toLowerCase()) ||
-              (c.companyName && c.companyName.toLowerCase().includes(search.toLowerCase()))
-          )
-        : rows;
-
       return {
-        customers: filteredRows,
-        total: totalRows[0]?.count ?? 0,
+        customers: rows,
+        total: totalResult[0]?.count ?? 0,
         page,
         pageSize,
       };
@@ -160,17 +136,12 @@ const customerRouter = router({
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
       const [customer] = await db
         .select()
         .from(customers)
         .where(and(eq(customers.id, input.id), eq(customers.userId, ctx.user.id)))
         .limit(1);
-
-      if (!customer) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
-      }
-
+      if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
       return customer;
     }),
 
@@ -180,58 +151,38 @@ const customerRouter = router({
         name: z.string().min(1).max(255),
         email: z.string().email(),
         companyName: z.string().max(255).optional(),
-        domain: z.string().max(255).optional(),
         mrr: z.number().min(0).default(0),
-        planName: z.string().max(255).optional(),
-        contractStartDate: z.date().optional(),
-        contractEndDate: z.date().optional(),
-        renewalDate: z.date().optional(),
-        npsScore: z.number().int().min(0).max(10).optional(),
-        tags: z.string().optional(),
-        notes: z.string().optional(),
+        plan: z.string().max(100).optional(),
         externalId: z.string().max(255).optional(),
+        notes: z.string().optional(),
+        tags: z.string().optional(),
+        trialEndsAt: z.date().optional(),
+        subscribedAt: z.date().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
-      const [existing] = await db
-        .select()
-        .from(customers)
-        .where(and(eq(customers.email, input.email), eq(customers.userId, ctx.user.id)))
-        .limit(1);
-
-      if (existing) {
-        throw new TRPCError({ code: "CONFLICT", message: "Customer with this email already exists" });
-      }
-
-      const [newCustomer] = await db
+      const [created] = await db
         .insert(customers)
         .values({
           userId: ctx.user.id,
           name: input.name,
           email: input.email,
-          companyName: input.companyName,
-          domain: input.domain,
+          companyName: input.companyName ?? null,
           mrr: String(input.mrr),
-          planName: input.planName,
-          contractStartDate: input.contractStartDate,
-          contractEndDate: input.contractEndDate,
-          renewalDate: input.renewalDate,
-          npsScore: input.npsScore,
-          tags: input.tags,
-          notes: input.notes,
-          externalId: input.externalId,
+          plan: input.plan ?? null,
+          externalId: input.externalId ?? null,
+          notes: input.notes ?? null,
+          tags: input.tags ?? null,
+          trialEndsAt: input.trialEndsAt ?? null,
+          subscribedAt: input.subscribedAt ?? null,
           healthStatus: "healthy",
           healthScore: 100,
-          churnRiskLevel: "low",
-          churnRiskScore: "0",
-          isActive: true,
+          churnProbability: "0",
         })
         .returning();
-
-      return newCustomer;
+      return created;
     }),
 
   update: protectedProcedure
@@ -241,56 +192,37 @@ const customerRouter = router({
         name: z.string().min(1).max(255).optional(),
         email: z.string().email().optional(),
         companyName: z.string().max(255).optional(),
-        domain: z.string().max(255).optional(),
         mrr: z.number().min(0).optional(),
-        planName: z.string().max(255).optional(),
-        contractStartDate: z.date().optional(),
-        contractEndDate: z.date().optional(),
-        renewalDate: z.date().optional(),
-        npsScore: z.number().int().min(0).max(10).optional(),
-        tags: z.string().optional(),
+        plan: z.string().max(100).optional(),
         notes: z.string().optional(),
-        externalId: z.string().max(255).optional(),
+        tags: z.string().optional(),
+        healthStatus: z.enum(["healthy", "at_risk", "critical", "churned"]).optional(),
+        healthScore: z.number().int().min(0).max(100).optional(),
+        churnProbability: z.number().min(0).max(1).optional(),
+        lastActiveAt: z.date().optional(),
+        churnedAt: z.date().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
+      const { id, mrr, churnProbability, ...rest } = input;
       const [existing] = await db
         .select()
         .from(customers)
-        .where(and(eq(customers.id, input.id), eq(customers.userId, ctx.user.id)))
+        .where(and(eq(customers.id, id), eq(customers.userId, ctx.user.id)))
         .limit(1);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
 
-      if (!existing) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
-      }
-
-      const updateData: Partial<typeof customers.$inferInsert> = {
-        updatedAt: new Date(),
-      };
-
-      if (input.name !== undefined) updateData.name = input.name;
-      if (input.email !== undefined) updateData.email = input.email;
-      if (input.companyName !== undefined) updateData.companyName = input.companyName;
-      if (input.domain !== undefined) updateData.domain = input.domain;
-      if (input.mrr !== undefined) updateData.mrr = String(input.mrr);
-      if (input.planName !== undefined) updateData.planName = input.planName;
-      if (input.contractStartDate !== undefined) updateData.contractStartDate = input.contractStartDate;
-      if (input.contractEndDate !== undefined) updateData.contractEndDate = input.contractEndDate;
-      if (input.renewalDate !== undefined) updateData.renewalDate = input.renewalDate;
-      if (input.npsScore !== undefined) updateData.npsScore = input.npsScore;
-      if (input.tags !== undefined) updateData.tags = input.tags;
-      if (input.notes !== undefined) updateData.notes = input.notes;
-      if (input.externalId !== undefined) updateData.externalId = input.externalId;
+      const updateData: Record<string, unknown> = { ...rest, updatedAt: new Date() };
+      if (mrr !== undefined) updateData.mrr = String(mrr);
+      if (churnProbability !== undefined) updateData.churnProbability = String(churnProbability);
 
       const [updated] = await db
         .update(customers)
         .set(updateData)
-        .where(and(eq(customers.id, input.id), eq(customers.userId, ctx.user.id)))
+        .where(and(eq(customers.id, id), eq(customers.userId, ctx.user.id)))
         .returning();
-
       return updated;
     }),
 
@@ -299,22 +231,15 @@ const customerRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
       const [existing] = await db
         .select()
         .from(customers)
         .where(and(eq(customers.id, input.id), eq(customers.userId, ctx.user.id)))
         .limit(1);
-
-      if (!existing) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
-      }
-
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
       await db
-        .update(customers)
-        .set({ isActive: false, updatedAt: new Date() })
+        .delete(customers)
         .where(and(eq(customers.id, input.id), eq(customers.userId, ctx.user.id)));
-
       return { success: true };
     }),
 
@@ -328,33 +253,51 @@ const customerRouter = router({
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
       const [customer] = await db
         .select()
         .from(customers)
         .where(and(eq(customers.id, input.customerId), eq(customers.userId, ctx.user.id)))
         .limit(1);
-
-      if (!customer) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
-      }
+      if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
 
       const since = new Date();
       since.setDate(since.getDate() - input.days);
 
-      const history = await db
+      return db
         .select()
         .from(healthScoreHistory)
         .where(
           and(
             eq(healthScoreHistory.customerId, input.customerId),
             eq(healthScoreHistory.userId, ctx.user.id),
-            gte(healthScoreHistory.scoredAt, since)
+            gte(healthScoreHistory.snapshotAt, since)
           )
         )
-        .orderBy(asc(healthScoreHistory.scoredAt));
+        .orderBy(asc(healthScoreHistory.snapshotAt));
+    }),
 
-      return history;
+  getHealthFactors: protectedProcedure
+    .input(z.object({ customerId: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const [customer] = await db
+        .select()
+        .from(customers)
+        .where(and(eq(customers.id, input.customerId), eq(customers.userId, ctx.user.id)))
+        .limit(1);
+      if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
+
+      return db
+        .select()
+        .from(healthScoreFactors)
+        .where(
+          and(
+            eq(healthScoreFactors.customerId, input.customerId),
+            eq(healthScoreFactors.userId, ctx.user.id)
+          )
+        )
+        .orderBy(desc(healthScoreFactors.scoredAt));
     }),
 
   recalculateHealthScore: protectedProcedure
@@ -362,204 +305,302 @@ const customerRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
       const [customer] = await db
         .select()
         .from(customers)
         .where(and(eq(customers.id, input.customerId), eq(customers.userId, ctx.user.id)))
         .limit(1);
+      if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
 
-      if (!customer) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
+      const factors = await db
+        .select()
+        .from(healthScoreFactors)
+        .where(
+          and(
+            eq(healthScoreFactors.customerId, input.customerId),
+            eq(healthScoreFactors.userId, ctx.user.id)
+          )
+        );
+
+      let newScore = 100;
+      if (factors.length > 0) {
+        let totalWeight = 0;
+        let weightedSum = 0;
+        for (const f of factors) {
+          const value = parseFloat(String(f.value));
+          const weight = parseFloat(String(f.weight));
+          weightedSum += value * weight;
+          totalWeight += weight;
+        }
+        newScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 100;
+        newScore = Math.max(0, Math.min(100, newScore));
       }
 
-      const [config] = await db
+      const churnProb = newScore < 30 ? 0.8 : newScore < 50 ? 0.5 : newScore < 70 ? 0.2 : 0.05;
+      const healthStatus =
+        newScore >= 80 ? "healthy" : newScore >= 60 ? "at_risk" : newScore >= 40 ? "critical" : "churned";
+
+      const [updated] = await db
+        .update(customers)
+        .set({
+          healthScore: newScore,
+          churnProbability: String(churnProb),
+          healthStatus,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(customers.id, input.customerId), eq(customers.userId, ctx.user.id)))
+        .returning();
+
+      await db.insert(healthScoreHistory).values({
+        userId: ctx.user.id,
+        customerId: input.customerId,
+        healthScore: newScore,
+        healthStatus,
+        churnProbability: String(churnProb),
+        snapshotAt: new Date(),
+      });
+
+      return updated;
+    }),
+
+  upsertHealthFactor: protectedProcedure
+    .input(
+      z.object({
+        customerId: z.number().int().positive(),
+        factorType: z.enum([
+          "product_usage",
+          "support_tickets",
+          "payment_history",
+          "engagement",
+          "nps",
+          "feature_adoption",
+          "login_frequency",
+          "custom",
+        ]),
+        factorName: z.string().min(1).max(255),
+        value: z.number().min(0).max(100),
+        weight: z.number().min(0).max(10).default(1),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const [customer] = await db
         .select()
-        .from(healthScoreConfigs)
-        .where(and(eq(healthScoreConfigs.userId, ctx.user.id), eq(healthScoreConfigs.isDefault, true)))
+        .from(customers)
+        .where(and(eq(customers.id, input.customerId), eq(customers.userId, ctx.user.id)))
         .limit(1);
+      if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
 
-      const weights = config ?? {
-        loginFrequencyWeight: 25,
-        featureAdoptionWeight: 25,
-        supportTicketWeight: 20,
-        npsWeight: 15,
-        paymentHealthWeight: 15,
-        loginFrequencyThresholdDays: 7,
-        featureAdoptionMinFeatures: 3,
-        supportTicketThreshold: 3,
-      };
+      const [inserted] = await db
+        .insert(healthScoreFactors)
+        .values({
+          userId: ctx.user.id,
+          customerId: input.customerId,
+          factorType: input.factorType,
+          factorName: input.factorName,
+          value: String(input.value),
+          weight: String(input.weight),
+          scoredAt: new Date(),
+        })
+        .returning();
 
-      const now = new Date();
-      const thresholdDate = new Date();
-      thresholdDate.setDate(thresholdDate.getDate() - weights.loginFrequencyThresholdDays);
+      return inserted;
+    }),
 
-      const recentEvents = await db
+  trackEvent: protectedProcedure
+    .input(
+      z.object({
+        customerId: z.number().int().positive(),
+        eventType: z.enum([
+          "login",
+          "feature_used",
+          "support_ticket_opened",
+          "support_ticket_resolved",
+          "payment_succeeded",
+          "payment_failed",
+          "nps_submitted",
+          "onboarding_completed",
+          "integration_connected",
+          "export_performed",
+          "custom",
+        ]),
+        eventName: z.string().min(1).max(255),
+        properties: z.record(z.unknown()).optional(),
+        occurredAt: z.date().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const [customer] = await db
         .select()
-        .from(customerEvents)
-        .where(
-          and(
-            eq(customerEvents.customerId, input.customerId),
-            eq(customerEvents.userId, ctx.user.id),
-            gte(customerEvents.occurredAt, thresholdDate)
-          )
-        );
+        .from(customers)
+        .where(and(eq(customers.id, input.customerId), eq(customers.userId, ctx.user.id)))
+        .limit(1);
+      if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
 
-      const loginEvents = recentEvents.filter((e) => e.eventType === "login");
-      const supportEvents = recentEvents.filter((e) => e.eventType === "support_ticket");
-
-      const featureUsageRows = await db
-        .select()
-        .from(customerFeatureUsage)
-        .where(
-          and(
-            eq(customerFeatureUsage.customerId, input.customerId),
-            eq(customerFeatureUsage.userId, ctx.user.id)
-          )
-        );
-
-      const adoptedFeatures = featureUsageRows.filter((f) => f.usageCount > 0).length;
-
-      const loginScore =
-        loginEvents.length > 0
-          ? Math.min(100, (loginEvents.length / weights.loginFrequencyThresholdDays) * 7 * 100)
-          : 0;
-
-      const featureScore =
-        adoptedFeatures >= weights.featureAdoptionMinFeatures
-          ? 100
-          : (adoptedFeatures / Math.max(1, weights.featureAdoptionMinFeatures)) * 100;
-
-      const supportScore =
-        supportEvents.length === 0
-          ? 100
-          : supportEvents.length <= weights.supportTicketThreshold
-          ? Math.max(0, 100 - supportEvents.length * 20)
-          : 0;
-
-      const npsScore = customer.npsScore !== null ? (customer.npsScore / 10) * 100 : 70;
-
-      const paymentHealthScore = 100;
-
-      const totalScore = Math.round(
-        (loginScore * weights.loginFrequencyWeight +
-          featureScore * weights.featureAdoptionWeight +
-          supportScore * weights.supportTicketWeight +
-          npsScore * weights.npsWeight +
-          paymentHealthScore * weights.paymentHealthWeight) /
-          100
-      );
-
-      const clampedScore = Math.max(0, Math.min(100, totalScore));
-
-      let healthStatus: "healthy" | "at_risk" | "critical" | "churned" = "healthy";
-      let churnRiskLevel: "low" | "medium" | "high" | "very_high" = "low";
-
-      if (clampedScore >= 75) {
-        healthStatus = "healthy";
-        churnRiskLevel = "low";
-      } else if (clampedScore >= 50) {
-        healthStatus = "at_risk";
-        churnRiskLevel = "medium";
-      } else if (clampedScore >= 25) {
-        healthStatus = "critical";
-        churnRiskLevel = "high";
-      } else {
-        healthStatus = "critical";
-        churnRiskLevel = "very_high";
-      }
-
-      const churnRiskScore = ((100 - clampedScore) / 100) * 100;
+      const [event] = await db
+        .insert(customerEvents)
+        .values({
+          userId: ctx.user.id,
+          customerId: input.customerId,
+          eventType: input.eventType,
+          eventName: input.eventName,
+          properties: input.properties ? JSON.stringify(input.properties) : null,
+          occurredAt: input.occurredAt ?? new Date(),
+        })
+        .returning();
 
       await db
         .update(customers)
-        .set({
-          healthScore: clampedScore,
-          healthStatus,
-          churnRiskLevel,
-          churnRiskScore: String(churnRiskScore.toFixed(2)),
-          updatedAt: new Date(),
-        })
+        .set({ lastActiveAt: input.occurredAt ?? new Date(), updatedAt: new Date() })
         .where(and(eq(customers.id, input.customerId), eq(customers.userId, ctx.user.id)));
 
-      await db.insert(healthScoreHistory).values({
-        customerId: input.customerId,
-        userId: ctx.user.id,
-        score: clampedScore,
-        healthStatus,
-        churnRiskScore: String(churnRiskScore.toFixed(2)),
-        loginFrequencyScore: Math.round(loginScore),
-        featureAdoptionScore: Math.round(featureScore),
-        supportTicketScore: Math.round(supportScore),
-        npsScore: Math.round(npsScore),
-        paymentHealthScore: Math.round(paymentHealthScore),
-        scoredAt: now,
-      });
+      return event;
+    }),
 
-      return {
-        healthScore: clampedScore,
-        healthStatus,
-        churnRiskLevel,
-        churnRiskScore,
-      };
+  getEvents: protectedProcedure
+    .input(
+      z.object({
+        customerId: z.number().int().positive(),
+        page: z.number().int().positive().default(1),
+        pageSize: z.number().int().positive().max(100).default(20),
+        eventType: z
+          .enum([
+            "login",
+            "feature_used",
+            "support_ticket_opened",
+            "support_ticket_resolved",
+            "payment_succeeded",
+            "payment_failed",
+            "nps_submitted",
+            "onboarding_completed",
+            "integration_connected",
+            "export_performed",
+            "custom",
+          ])
+          .optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const [customer] = await db
+        .select()
+        .from(customers)
+        .where(and(eq(customers.id, input.customerId), eq(customers.userId, ctx.user.id)))
+        .limit(1);
+      if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
+
+      const { page, pageSize, eventType } = input;
+      const offset = (page - 1) * pageSize;
+      const conditions = [
+        eq(customerEvents.customerId, input.customerId),
+        eq(customerEvents.userId, ctx.user.id),
+      ];
+      if (eventType) conditions.push(eq(customerEvents.eventType, eventType));
+
+      const [rows, totalResult] = await Promise.all([
+        db
+          .select()
+          .from(customerEvents)
+          .where(and(...conditions))
+          .orderBy(desc(customerEvents.occurredAt))
+          .limit(pageSize)
+          .offset(offset),
+        db
+          .select({ count: count() })
+          .from(customerEvents)
+          .where(and(...conditions)),
+      ]);
+
+      return { events: rows, total: totalResult[0]?.count ?? 0, page, pageSize };
     }),
 
   getStats: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-    const allCustomers = await db
-      .select()
-      .from(customers)
-      .where(and(eq(customers.userId, ctx.user.id), eq(customers.isActive, true)));
-
-    const total = allCustomers.length;
-    const healthy = allCustomers.filter((c) => c.healthStatus === "healthy").length;
-    const atRisk = allCustomers.filter((c) => c.healthStatus === "at_risk").length;
-    const critical = allCustomers.filter((c) => c.healthStatus === "critical").length;
-    const churned = allCustomers.filter((c) => c.healthStatus === "churned").length;
-
-    const totalMrr = allCustomers.reduce((sum, c) => sum + parseFloat(String(c.mrr ?? "0")), 0);
-    const avgHealthScore =
-      total > 0 ? Math.round(allCustomers.reduce((sum, c) => sum + c.healthScore, 0) / total) : 0;
-
-    const highRisk = allCustomers.filter(
-      (c) => c.churnRiskLevel === "high" || c.churnRiskLevel === "very_high"
-    ).length;
-
-    const mrrAtRisk = allCustomers
-      .filter((c) => c.churnRiskLevel === "high" || c.churnRiskLevel === "very_high")
-      .reduce((sum, c) => sum + parseFloat(String(c.mrr ?? "0")), 0);
+    const [totalResult, healthyResult, atRiskResult, criticalResult, churnedResult, mrrResult, avgHealthResult] =
+      await Promise.all([
+        db.select({ count: count() }).from(customers).where(eq(customers.userId, ctx.user.id)),
+        db
+          .select({ count: count() })
+          .from(customers)
+          .where(and(eq(customers.userId, ctx.user.id), eq(customers.healthStatus, "healthy"))),
+        db
+          .select({ count: count() })
+          .from(customers)
+          .where(and(eq(customers.userId, ctx.user.id), eq(customers.healthStatus, "at_risk"))),
+        db
+          .select({ count: count() })
+          .from(customers)
+          .where(and(eq(customers.userId, ctx.user.id), eq(customers.healthStatus, "critical"))),
+        db
+          .select({ count: count() })
+          .from(customers)
+          .where(and(eq(customers.userId, ctx.user.id), eq(customers.healthStatus, "churned"))),
+        db
+          .select({ total: sql<string>`SUM(${customers.mrr})` })
+          .from(customers)
+          .where(and(eq(customers.userId, ctx.user.id), sql`${customers.healthStatus} != 'churned'`)),
+        db
+          .select({ avg: avg(customers.healthScore) })
+          .from(customers)
+          .where(and(eq(customers.userId, ctx.user.id), sql`${customers.healthStatus} != 'churned'`)),
+      ]);
 
     return {
-      total,
-      healthy,
-      atRisk,
-      critical,
-      churned,
-      totalMrr,
-      avgHealthScore,
-      highRisk,
-      mrrAtRisk,
+      total: totalResult[0]?.count ?? 0,
+      healthy: healthyResult[0]?.count ?? 0,
+      atRisk: atRiskResult[0]?.count ?? 0,
+      critical: criticalResult[0]?.count ?? 0,
+      churned: churnedResult[0]?.count ?? 0,
+      totalMrr: parseFloat(mrrResult[0]?.total ?? "0"),
+      averageHealthScore: parseFloat(String(avgHealthResult[0]?.avg ?? "0")),
     };
   }),
 });
 
-// ─── Feature Router (main entity for Dashboard compatibility) ─────────────────
+// ─── Feature Router (alias for customer — required by dashboard) ──────────────
 const featureRouter = router({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+  list: protectedProcedure
+    .input(
+      z.object({
+        page: z.number().int().positive().default(1),
+        pageSize: z.number().int().positive().max(100).default(20),
+        healthStatus: z.enum(["healthy", "at_risk", "critical", "churned"]).optional(),
+        search: z.string().optional(),
+      }).default({})
+    )
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { page, pageSize, healthStatus, search } = input;
+      const offset = (page - 1) * pageSize;
 
-    const rows = await db
-      .select()
-      .from(customers)
-      .where(and(eq(customers.userId, ctx.user.id), eq(customers.isActive, true)))
-      .orderBy(desc(customers.createdAt))
-      .limit(50);
+      const conditions = [eq(customers.userId, ctx.user.id)];
+      if (healthStatus) conditions.push(eq(customers.healthStatus, healthStatus));
+      if (search) {
+        conditions.push(
+          sql`(${customers.name} ILIKE ${"%" + search + "%"} OR ${customers.email} ILIKE ${"%" + search + "%"})`
+        );
+      }
 
-    return rows;
-  }),
+      const [rows, totalResult] = await Promise.all([
+        db
+          .select()
+          .from(customers)
+          .where(and(...conditions))
+          .orderBy(desc(customers.createdAt))
+          .limit(pageSize)
+          .offset(offset),
+        db.select({ count: count() }).from(customers).where(and(...conditions)),
+      ]);
+
+      return { customers: rows, total: totalResult[0]?.count ?? 0, page, pageSize };
+    }),
 
   create: protectedProcedure
     .input(
@@ -568,39 +609,27 @@ const featureRouter = router({
         email: z.string().email(),
         companyName: z.string().max(255).optional(),
         mrr: z.number().min(0).default(0),
+        plan: z.string().max(100).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
-      const [existing] = await db
-        .select()
-        .from(customers)
-        .where(and(eq(customers.email, input.email), eq(customers.userId, ctx.user.id)))
-        .limit(1);
-
-      if (existing) {
-        throw new TRPCError({ code: "CONFLICT", message: "Customer with this email already exists" });
-      }
-
-      const [newCustomer] = await db
+      const [created] = await db
         .insert(customers)
         .values({
           userId: ctx.user.id,
           name: input.name,
           email: input.email,
-          companyName: input.companyName,
+          companyName: input.companyName ?? null,
           mrr: String(input.mrr),
+          plan: input.plan ?? null,
           healthStatus: "healthy",
           healthScore: 100,
-          churnRiskLevel: "low",
-          churnRiskScore: "0",
-          isActive: true,
+          churnProbability: "0",
         })
         .returning();
-
-      return newCustomer;
+      return created;
     }),
 
   delete: protectedProcedure
@@ -608,200 +637,112 @@ const featureRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
       const [existing] = await db
         .select()
         .from(customers)
         .where(and(eq(customers.id, input.id), eq(customers.userId, ctx.user.id)))
         .limit(1);
-
-      if (!existing) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
-      }
-
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
       await db
-        .update(customers)
-        .set({ isActive: false, updatedAt: new Date() })
+        .delete(customers)
         .where(and(eq(customers.id, input.id), eq(customers.userId, ctx.user.id)));
-
       return { success: true };
     }),
 });
 
-// ─── Health Score Config Router ───────────────────────────────────────────────
-const healthScoreConfigRouter = router({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+// ─── Playbooks Router ─────────────────────────────────────────────────────────
+const playbooksRouter = router({
+  list: protectedProcedure
+    .input(
+      z.object({
+        status: z.enum(["active", "paused", "archived", "draft"]).optional(),
+        page: z.number().int().positive().default(1),
+        pageSize: z.number().int().positive().max(100).default(20),
+      }).default({})
+    )
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { page, pageSize, status } = input;
+      const offset = (page - 1) * pageSize;
 
-    return db
-      .select()
-      .from(healthScoreConfigs)
-      .where(eq(healthScoreConfigs.userId, ctx.user.id))
-      .orderBy(desc(healthScoreConfigs.createdAt));
-  }),
+      const conditions = [eq(playbooks.userId, ctx.user.id)];
+      if (status) conditions.push(eq(playbooks.status, status));
 
-  getDefault: protectedProcedure.query(async ({ ctx }) => {
-    const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const [rows, totalResult] = await Promise.all([
+        db
+          .select()
+          .from(playbooks)
+          .where(and(...conditions))
+          .orderBy(desc(playbooks.createdAt))
+          .limit(pageSize)
+          .offset(offset),
+        db.select({ count: count() }).from(playbooks).where(and(...conditions)),
+      ]);
 
-    const [config] = await db
-      .select()
-      .from(healthScoreConfigs)
-      .where(and(eq(healthScoreConfigs.userId, ctx.user.id), eq(healthScoreConfigs.isDefault, true)))
-      .limit(1);
+      return { playbooks: rows, total: totalResult[0]?.count ?? 0, page, pageSize };
+    }),
 
-    return config ?? null;
-  }),
+  getById: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const [playbook] = await db
+        .select()
+        .from(playbooks)
+        .where(and(eq(playbooks.id, input.id), eq(playbooks.userId, ctx.user.id)))
+        .limit(1);
+      if (!playbook) throw new TRPCError({ code: "NOT_FOUND", message: "Playbook not found" });
+
+      const steps = await db
+        .select()
+        .from(playbookSteps)
+        .where(and(eq(playbookSteps.playbookId, input.id), eq(playbookSteps.userId, ctx.user.id)))
+        .orderBy(asc(playbookSteps.stepOrder));
+
+      return { ...playbook, steps };
+    }),
 
   create: protectedProcedure
     .input(
       z.object({
         name: z.string().min(1).max(255),
-        isDefault: z.boolean().default(false),
-        loginFrequencyWeight: z.number().int().min(0).max(100).default(25),
-        featureAdoptionWeight: z.number().int().min(0).max(100).default(25),
-        supportTicketWeight: z.number().int().min(0).max(100).default(20),
-        npsWeight: z.number().int().min(0).max(100).default(15),
-        paymentHealthWeight: z.number().int().min(0).max(100).default(15),
-        loginFrequencyThresholdDays: z.number().int().positive().default(7),
-        featureAdoptionMinFeatures: z.number().int().positive().default(3),
-        supportTicketThreshold: z.number().int().positive().default(3),
+        description: z.string().optional(),
+        triggerType: z.enum([
+          "health_score_drops_below",
+          "health_score_rises_above",
+          "churn_probability_exceeds",
+          "no_login_for_days",
+          "mrr_drops",
+          "trial_ending_soon",
+          "manual",
+          "custom_event",
+        ]),
+        triggerThreshold: z.number().optional(),
+        status: z.enum(["active", "paused", "archived", "draft"]).default("draft"),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
-      const totalWeight =
-        input.loginFrequencyWeight +
-        input.featureAdoptionWeight +
-        input.supportTicketWeight +
-        input.npsWeight +
-        input.paymentHealthWeight;
-
-      if (totalWeight !== 100) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Weights must sum to 100, got ${totalWeight}`,
-        });
-      }
-
-      if (input.isDefault) {
-        await db
-          .update(healthScoreConfigs)
-          .set({ isDefault: false, updatedAt: new Date() })
-          .where(and(eq(healthScoreConfigs.userId, ctx.user.id), eq(healthScoreConfigs.isDefault, true)));
-      }
-
-      const [config] = await db
-        .insert(healthScoreConfigs)
+      const [created] = await db
+        .insert(playbooks)
         .values({
           userId: ctx.user.id,
-          ...input,
+          name: input.name,
+          description: input.description ?? null,
+          triggerType: input.triggerType,
+          triggerThreshold: input.triggerThreshold !== undefined ? String(input.triggerThreshold) : null,
+          status: input.status,
+          runCount: 0,
         })
         .returning();
-
-      return config;
+      return created;
     }),
 
   update: protectedProcedure
     .input(
       z.object({
         id: z.number().int().positive(),
-        name: z.string().min(1).max(255).optional(),
-        isDefault: z.boolean().optional(),
-        loginFrequencyWeight: z.number().int().min(0).max(100).optional(),
-        featureAdoptionWeight: z.number().int().min(0).max(100).optional(),
-        supportTicketWeight: z.number().int().min(0).max(100).optional(),
-        npsWeight: z.number().int().min(0).max(100).optional(),
-        paymentHealthWeight: z.number().int().min(0).max(100).optional(),
-        loginFrequencyThresholdDays: z.number().int().positive().optional(),
-        featureAdoptionMinFeatures: z.number().int().positive().optional(),
-        supportTicketThreshold: z.number().int().positive().optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
-      const [existing] = await db
-        .select()
-        .from(healthScoreConfigs)
-        .where(and(eq(healthScoreConfigs.id, input.id), eq(healthScoreConfigs.userId, ctx.user.id)))
-        .limit(1);
-
-      if (!existing) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Health score config not found" });
-      }
-
-      if (input.isDefault) {
-        await db
-          .update(healthScoreConfigs)
-          .set({ isDefault: false, updatedAt: new Date() })
-          .where(
-            and(
-              eq(healthScoreConfigs.userId, ctx.user.id),
-              eq(healthScoreConfigs.isDefault, true),
-              ne(healthScoreConfigs.id, input.id)
-            )
-          );
-      }
-
-      const { id, ...updateFields } = input;
-
-      const [updated] = await db
-        .update(healthScoreConfigs)
-        .set({ ...updateFields, updatedAt: new Date() })
-        .where(and(eq(healthScoreConfigs.id, input.id), eq(healthScoreConfigs.userId, ctx.user.id)))
-        .returning();
-
-      return updated;
-    }),
-
-  delete: protectedProcedure
-    .input(z.object({ id: z.number().int().positive() }))
-    .mutation(async ({ ctx, input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
-      const [existing] = await db
-        .select()
-        .from(healthScoreConfigs)
-        .where(and(eq(healthScoreConfigs.id, input.id), eq(healthScoreConfigs.userId, ctx.user.id)))
-        .limit(1);
-
-      if (!existing) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Config not found" });
-      }
-
-      await db
-        .delete(healthScoreConfigs)
-        .where(eq(healthScoreConfigs.id, input.id));
-
-      return { success: true };
-    }),
-});
-
-export const appRouter = router({
-  auth: router({
-    me: publicProcedure.query(({ ctx }) => ctx.user ?? null),
-    logout: publicProcedure.mutation(async ({ ctx }) => {
-      ctx.resHeaders.append("Set-Cookie", "session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax");
-      return { ok: true };
-    }),
-  }),
-  payments: paymentsRouter,
-  customers: customersRouter,
-  healthScores: healthScoresRouter,
-  events: eventsRouter,
-  churnPredictions: churnPredictionsRouter,
-  playbooks: playbooksRouter,
-  segments: segmentsRouter,
-  alerts: alertsRouter,
-  integrations: integrationsRouter,
-  analytics: analyticsRouter,
-  healthScoreConfigs: healthScoreConfigsRouter,
-});
-
-export type AppRouter = typeof appRouter;
+        name: z.

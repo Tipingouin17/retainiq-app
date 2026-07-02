@@ -1,99 +1,100 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "../drizzle/schema";
-import { eq, and, desc, asc, lt, gte, lte, isNull, or, sql } from "drizzle-orm";
+import { eq, and, desc, asc, lt, gt, gte, lte, sql } from "drizzle-orm";
 import {
-  users,
   subscriptions,
   customers,
-  healthScoreConfigs,
+  healthScoreFactors,
   healthScoreHistory,
-  customerEvents,
-  features,
-  customerFeatureUsage,
   playbooks,
   playbookSteps,
-  playbookExecutions,
-  playbookStepExecutions,
+  playbookRuns,
+  playbookStepRuns,
+  customerEvents,
   tasks,
   alerts,
   integrations,
-} from "../drizzle/schema";
-import type {
-  Subscription,
-  NewSubscription,
-  Customer,
-  NewCustomer,
-  HealthScoreConfig,
-  NewHealthScoreConfig,
-  HealthScoreHistory,
-  NewHealthScoreHistory,
-  CustomerEvent,
-  NewCustomerEvent,
-  Feature,
-  NewFeature,
-  CustomerFeatureUsage,
-  NewCustomerFeatureUsage,
-  Playbook,
-  NewPlaybook,
-  PlaybookStep,
-  NewPlaybookStep,
-  PlaybookExecution,
-  NewPlaybookExecution,
-  PlaybookStepExecution,
-  NewPlaybookStepExecution,
-  Task,
-  NewTask,
-  Alert,
-  NewAlert,
+  scoringRules,
+  type Subscription,
+  type NewSubscription,
+  type Customer,
+  type NewCustomer,
+  type HealthScoreFactor,
+  type NewHealthScoreFactor,
+  type HealthScoreHistory,
+  type NewHealthScoreHistory,
+  type Playbook,
+  type NewPlaybook,
+  type PlaybookStep,
+  type NewPlaybookStep,
+  type PlaybookRun,
+  type NewPlaybookRun,
+  type PlaybookStepRun,
+  type NewPlaybookStepRun,
+  type CustomerEvent,
+  type NewCustomerEvent,
+  type Task,
+  type NewTask,
+  type Alert,
+  type NewAlert,
+  type Integration,
+  type NewIntegration,
+  type ScoringRule,
+  type NewScoringRule,
 } from "../drizzle/schema";
 
 let db: ReturnType<typeof drizzle> | null = null;
 
 export async function getDb() {
   if (!db) {
-    const pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    });
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     db = drizzle(pool, { schema });
   }
   return db;
 }
 
-// ─── Core User Functions (DO NOT MODIFY) ─────────────────────────────────────
-
-export async function upsertUser(clerkId: string, email: string, name: string, avatarUrl?: string) {
+export async function upsertUser(clerkId: string, email: string, name: string, imageUrl?: string) {
   const db = await getDb();
-  const existing = await db.select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
+  const existing = await db!
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.clerkId, clerkId))
+    .limit(1);
+
   if (existing.length > 0) {
-    const updated = await db
-      .update(users)
-      .set({ email, name, avatarUrl, updatedAt: new Date() })
-      .where(eq(users.clerkId, clerkId))
+    const updated = await db!
+      .update(schema.users)
+      .set({ email, name, imageUrl, updatedAt: new Date() })
+      .where(eq(schema.users.clerkId, clerkId))
       .returning();
     return updated[0];
+  } else {
+    const inserted = await db!
+      .insert(schema.users)
+      .values({ clerkId, email, name, imageUrl })
+      .returning();
+    return inserted[0];
   }
-  const inserted = await db
-    .insert(users)
-    .values({ clerkId, email, name, avatarUrl })
-    .returning();
-  return inserted[0];
 }
 
 export async function getUserByOpenId(clerkId: string) {
   const db = await getDb();
-  const result = await db.select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
+  const result = await db!
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.clerkId, clerkId))
+    .limit(1);
   return result[0] ?? null;
 }
 
-// ─── Subscription Helpers ─────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Subscriptions
+// ---------------------------------------------------------------------------
 
 export async function getSubscriptionByUserId(userId: number): Promise<Subscription | null> {
   const db = await getDb();
-  const result = await db
+  const result = await db!
     .select()
     .from(subscriptions)
     .where(eq(subscriptions.userId, userId))
@@ -104,7 +105,7 @@ export async function getSubscriptionByUserId(userId: number): Promise<Subscript
 
 export async function getSubscriptionByStripeCustomerId(stripeCustomerId: string): Promise<Subscription | null> {
   const db = await getDb();
-  const result = await db
+  const result = await db!
     .select()
     .from(subscriptions)
     .where(eq(subscriptions.stripeCustomerId, stripeCustomerId))
@@ -114,7 +115,7 @@ export async function getSubscriptionByStripeCustomerId(stripeCustomerId: string
 
 export async function getSubscriptionByStripeSubscriptionId(stripeSubscriptionId: string): Promise<Subscription | null> {
   const db = await getDb();
-  const result = await db
+  const result = await db!
     .select()
     .from(subscriptions)
     .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId))
@@ -124,16 +125,16 @@ export async function getSubscriptionByStripeSubscriptionId(stripeSubscriptionId
 
 export async function createSubscription(data: NewSubscription): Promise<Subscription> {
   const db = await getDb();
-  const result = await db.insert(subscriptions).values(data).returning();
+  const result = await db!.insert(subscriptions).values(data).returning();
   return result[0];
 }
 
 export async function updateSubscription(
   id: number,
-  data: Partial<Omit<Subscription, "id" | "createdAt">>
+  data: Partial<Omit<NewSubscription, "id" | "userId" | "createdAt">>
 ): Promise<Subscription | null> {
   const db = await getDb();
-  const result = await db
+  const result = await db!
     .update(subscriptions)
     .set({ ...data, updatedAt: new Date() })
     .where(eq(subscriptions.id, id))
@@ -143,39 +144,41 @@ export async function updateSubscription(
 
 export async function upsertSubscriptionByUserId(
   userId: number,
-  data: Partial<NewSubscription>
+  data: Omit<NewSubscription, "userId" | "createdAt" | "updatedAt">
 ): Promise<Subscription> {
   const db = await getDb();
   const existing = await getSubscriptionByUserId(userId);
   if (existing) {
-    const updated = await db
+    const updated = await db!
       .update(subscriptions)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(subscriptions.id, existing.id))
+      .where(eq(subscriptions.userId, userId))
       .returning();
     return updated[0];
   }
-  const inserted = await db
+  const inserted = await db!
     .insert(subscriptions)
-    .values({ userId, ...data } as NewSubscription)
+    .values({ ...data, userId })
     .returning();
   return inserted[0];
 }
 
-// ─── Customer Helpers ─────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Customers
+// ---------------------------------------------------------------------------
 
 export async function getCustomersByUserId(userId: number): Promise<Customer[]> {
   const db = await getDb();
-  return db
+  return db!
     .select()
     .from(customers)
-    .where(and(eq(customers.userId, userId), eq(customers.isActive, true)))
+    .where(eq(customers.userId, userId))
     .orderBy(desc(customers.createdAt));
 }
 
 export async function getCustomerById(id: number, userId: number): Promise<Customer | null> {
   const db = await getDb();
-  const result = await db
+  const result = await db!
     .select()
     .from(customers)
     .where(and(eq(customers.id, id), eq(customers.userId, userId)))
@@ -183,19 +186,9 @@ export async function getCustomerById(id: number, userId: number): Promise<Custo
   return result[0] ?? null;
 }
 
-export async function getCustomerByExternalId(externalId: string, userId: number): Promise<Customer | null> {
-  const db = await getDb();
-  const result = await db
-    .select()
-    .from(customers)
-    .where(and(eq(customers.externalId, externalId), eq(customers.userId, userId)))
-    .limit(1);
-  return result[0] ?? null;
-}
-
 export async function getCustomerByEmail(email: string, userId: number): Promise<Customer | null> {
   const db = await getDb();
-  const result = await db
+  const result = await db!
     .select()
     .from(customers)
     .where(and(eq(customers.email, email), eq(customers.userId, userId)))
@@ -203,49 +196,25 @@ export async function getCustomerByEmail(email: string, userId: number): Promise
   return result[0] ?? null;
 }
 
-export async function createCustomer(data: NewCustomer): Promise<Customer> {
+export async function getCustomerByExternalId(externalId: string, userId: number): Promise<Customer | null> {
   const db = await getDb();
-  const result = await db.insert(customers).values(data).returning();
-  return result[0];
-}
-
-export async function updateCustomer(
-  id: number,
-  userId: number,
-  data: Partial<Omit<Customer, "id" | "userId" | "createdAt">>
-): Promise<Customer | null> {
-  const db = await getDb();
-  const result = await db
-    .update(customers)
-    .set({ ...data, updatedAt: new Date() })
-    .where(and(eq(customers.id, id), eq(customers.userId, userId)))
-    .returning();
+  const result = await db!
+    .select()
+    .from(customers)
+    .where(and(eq(customers.externalId, externalId), eq(customers.userId, userId)))
+    .limit(1);
   return result[0] ?? null;
-}
-
-export async function softDeleteCustomer(id: number, userId: number): Promise<boolean> {
-  const db = await getDb();
-  const result = await db
-    .update(customers)
-    .set({ isActive: false, updatedAt: new Date() })
-    .where(and(eq(customers.id, id), eq(customers.userId, userId)))
-    .returning();
-  return result.length > 0;
 }
 
 export async function getAtRiskCustomers(userId: number): Promise<Customer[]> {
   const db = await getDb();
-  return db
+  return db!
     .select()
     .from(customers)
     .where(
       and(
         eq(customers.userId, userId),
-        eq(customers.isActive, true),
-        or(
-          eq(customers.healthStatus, "at_risk"),
-          eq(customers.healthStatus, "critical")
-        )
+        sql`${customers.healthStatus} IN ('at_risk', 'critical')`
       )
     )
     .orderBy(asc(customers.healthScore));
@@ -253,290 +222,328 @@ export async function getAtRiskCustomers(userId: number): Promise<Customer[]> {
 
 export async function getChurnedCustomers(userId: number): Promise<Customer[]> {
   const db = await getDb();
-  return db
+  return db!
     .select()
     .from(customers)
-    .where(
-      and(
-        eq(customers.userId, userId),
-        eq(customers.healthStatus, "churned")
-      )
-    )
-    .orderBy(desc(customers.updatedAt));
+    .where(and(eq(customers.userId, userId), eq(customers.healthStatus, "churned")))
+    .orderBy(desc(customers.churnedAt));
 }
 
-export async function getCustomersWithUpcomingRenewals(
-  userId: number,
-  withinDays: number = 30
-): Promise<Customer[]> {
+export async function createCustomer(data: NewCustomer): Promise<Customer> {
   const db = await getDb();
-  const now = new Date();
-  const future = new Date();
-  future.setDate(future.getDate() + withinDays);
-  return db
-    .select()
-    .from(customers)
-    .where(
-      and(
-        eq(customers.userId, userId),
-        eq(customers.isActive, true),
-        gte(customers.renewalDate, now),
-        lte(customers.renewalDate, future)
-      )
-    )
-    .orderBy(asc(customers.renewalDate));
+  const result = await db!.insert(customers).values(data).returning();
+  return result[0];
 }
 
-export async function updateCustomerHealthScore(
+export async function updateCustomer(
   id: number,
   userId: number,
-  score: number,
-  healthStatus: "healthy" | "at_risk" | "critical" | "churned",
-  churnRiskScore: string
+  data: Partial<Omit<NewCustomer, "id" | "userId" | "createdAt">>
 ): Promise<Customer | null> {
   const db = await getDb();
-  const result = await db
+  const result = await db!
     .update(customers)
-    .set({
-      healthScore: score,
-      healthStatus,
-      churnRiskScore,
-      updatedAt: new Date(),
-    })
+    .set({ ...data, updatedAt: new Date() })
     .where(and(eq(customers.id, id), eq(customers.userId, userId)))
     .returning();
   return result[0] ?? null;
 }
 
-export async function updateCustomerLastActivity(
+export async function updateCustomerHealthScore(
   id: number,
   userId: number,
-  activityType: "login" | "activity"
-): Promise<void> {
+  healthScore: number,
+  healthStatus: Customer["healthStatus"],
+  churnProbability: string
+): Promise<Customer | null> {
   const db = await getDb();
-  const now = new Date();
-  const updateData: Partial<Customer> =
-    activityType === "login"
-      ? { lastLoginAt: now, lastActivityAt: now, updatedAt: now }
-      : { lastActivityAt: now, updatedAt: now };
-  await db
+  const result = await db!
     .update(customers)
-    .set(updateData)
-    .where(and(eq(customers.id, id), eq(customers.userId, userId)));
-}
-
-export async function getCustomerCountByHealthStatus(
-  userId: number
-): Promise<Record<string, number>> {
-  const db = await getDb();
-  const result = await db
-    .select({
-      healthStatus: customers.healthStatus,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(customers)
-    .where(and(eq(customers.userId, userId), eq(customers.isActive, true)))
-    .groupBy(customers.healthStatus);
-  return result.reduce(
-    (acc, row) => {
-      acc[row.healthStatus] = row.count;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
-}
-
-export async function getTotalMrrByUserId(userId: number): Promise<number> {
-  const db = await getDb();
-  const result = await db
-    .select({ total: sql<string>`coalesce(sum(mrr), 0)` })
-    .from(customers)
-    .where(and(eq(customers.userId, userId), eq(customers.isActive, true)));
-  return parseFloat(result[0]?.total ?? "0");
-}
-
-// ─── Health Score Config Helpers ──────────────────────────────────────────────
-
-export async function getHealthScoreConfigsByUserId(userId: number): Promise<HealthScoreConfig[]> {
-  const db = await getDb();
-  return db
-    .select()
-    .from(healthScoreConfigs)
-    .where(eq(healthScoreConfigs.userId, userId))
-    .orderBy(desc(healthScoreConfigs.isDefault), asc(healthScoreConfigs.name));
-}
-
-export async function getDefaultHealthScoreConfig(userId: number): Promise<HealthScoreConfig | null> {
-  const db = await getDb();
-  const result = await db
-    .select()
-    .from(healthScoreConfigs)
-    .where(and(eq(healthScoreConfigs.userId, userId), eq(healthScoreConfigs.isDefault, true)))
-    .limit(1);
-  return result[0] ?? null;
-}
-
-export async function getHealthScoreConfigById(id: number, userId: number): Promise<HealthScoreConfig | null> {
-  const db = await getDb();
-  const result = await db
-    .select()
-    .from(healthScoreConfigs)
-    .where(and(eq(healthScoreConfigs.id, id), eq(healthScoreConfigs.userId, userId)))
-    .limit(1);
-  return result[0] ?? null;
-}
-
-export async function createHealthScoreConfig(data: NewHealthScoreConfig): Promise<HealthScoreConfig> {
-  const db = await getDb();
-  if (data.isDefault) {
-    await db
-      .update(healthScoreConfigs)
-      .set({ isDefault: false, updatedAt: new Date() })
-      .where(eq(healthScoreConfigs.userId, data.userId));
-  }
-  const result = await db.insert(healthScoreConfigs).values(data).returning();
-  return result[0];
-}
-
-export async function updateHealthScoreConfig(
-  id: number,
-  userId: number,
-  data: Partial<Omit<HealthScoreConfig, "id" | "userId" | "createdAt">>
-): Promise<HealthScoreConfig | null> {
-  const db = await getDb();
-  if (data.isDefault) {
-    await db
-      .update(healthScoreConfigs)
-      .set({ isDefault: false, updatedAt: new Date() })
-      .where(and(eq(healthScoreConfigs.userId, userId), sql`${healthScoreConfigs.id} != ${id}`));
-  }
-  const result = await db
-    .update(healthScoreConfigs)
-    .set({ ...data, updatedAt: new Date() })
-    .where(and(eq(healthScoreConfigs.id, id), eq(healthScoreConfigs.userId, userId)))
+    .set({ healthScore, healthStatus, churnProbability, updatedAt: new Date() })
+    .where(and(eq(customers.id, id), eq(customers.userId, userId)))
     .returning();
   return result[0] ?? null;
 }
 
-export async function deleteHealthScoreConfig(id: number, userId: number): Promise<boolean> {
+export async function deleteCustomer(id: number, userId: number): Promise<boolean> {
   const db = await getDb();
-  const result = await db
-    .delete(healthScoreConfigs)
-    .where(and(eq(healthScoreConfigs.id, id), eq(healthScoreConfigs.userId, userId)))
+  const result = await db!
+    .delete(customers)
+    .where(and(eq(customers.id, id), eq(customers.userId, userId)))
     .returning();
   return result.length > 0;
 }
 
-// ─── Health Score History Helpers ─────────────────────────────────────────────
+export async function getCustomerCountByUserId(userId: number): Promise<number> {
+  const db = await getDb();
+  const result = await db!
+    .select({ count: sql<number>`count(*)::int` })
+    .from(customers)
+    .where(eq(customers.userId, userId));
+  return result[0]?.count ?? 0;
+}
+
+export async function getTotalMrrByUserId(userId: number): Promise<string> {
+  const db = await getDb();
+  const result = await db!
+    .select({ total: sql<string>`COALESCE(SUM(${customers.mrr}), 0)::text` })
+    .from(customers)
+    .where(and(eq(customers.userId, userId), sql`${customers.healthStatus} != 'churned'`));
+  return result[0]?.total ?? "0";
+}
+
+// ---------------------------------------------------------------------------
+// Health Score Factors
+// ---------------------------------------------------------------------------
+
+export async function getHealthScoreFactorsByCustomerId(
+  customerId: number,
+  userId: number
+): Promise<HealthScoreFactor[]> {
+  const db = await getDb();
+  return db!
+    .select()
+    .from(healthScoreFactors)
+    .where(
+      and(
+        eq(healthScoreFactors.customerId, customerId),
+        eq(healthScoreFactors.userId, userId)
+      )
+    )
+    .orderBy(desc(healthScoreFactors.scoredAt));
+}
+
+export async function getLatestHealthScoreFactorsByCustomerId(
+  customerId: number,
+  userId: number
+): Promise<HealthScoreFactor[]> {
+  const db = await getDb();
+  return db!
+    .select()
+    .from(healthScoreFactors)
+    .where(
+      and(
+        eq(healthScoreFactors.customerId, customerId),
+        eq(healthScoreFactors.userId, userId)
+      )
+    )
+    .orderBy(desc(healthScoreFactors.scoredAt))
+    .limit(20);
+}
+
+export async function createHealthScoreFactor(data: NewHealthScoreFactor): Promise<HealthScoreFactor> {
+  const db = await getDb();
+  const result = await db!.insert(healthScoreFactors).values(data).returning();
+  return result[0];
+}
+
+export async function createHealthScoreFactorsBatch(data: NewHealthScoreFactor[]): Promise<HealthScoreFactor[]> {
+  if (data.length === 0) return [];
+  const db = await getDb();
+  return db!.insert(healthScoreFactors).values(data).returning();
+}
+
+export async function deleteHealthScoreFactorsByCustomerId(
+  customerId: number,
+  userId: number
+): Promise<void> {
+  const db = await getDb();
+  await db!
+    .delete(healthScoreFactors)
+    .where(
+      and(
+        eq(healthScoreFactors.customerId, customerId),
+        eq(healthScoreFactors.userId, userId)
+      )
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Health Score History
+// ---------------------------------------------------------------------------
 
 export async function getHealthScoreHistoryByCustomerId(
   customerId: number,
   userId: number,
-  limitRows: number = 90
+  limit = 90
 ): Promise<HealthScoreHistory[]> {
   const db = await getDb();
-  return db
+  return db!
     .select()
     .from(healthScoreHistory)
-    .where(and(eq(healthScoreHistory.customerId, customerId), eq(healthScoreHistory.userId, userId)))
-    .orderBy(desc(healthScoreHistory.scoredAt))
-    .limit(limitRows);
+    .where(
+      and(
+        eq(healthScoreHistory.customerId, customerId),
+        eq(healthScoreHistory.userId, userId)
+      )
+    )
+    .orderBy(desc(healthScoreHistory.snapshotAt))
+    .limit(limit);
 }
 
-export async function createHealthScoreHistory(data: NewHealthScoreHistory): Promise<HealthScoreHistory> {
+export async function createHealthScoreHistorySnapshot(data: NewHealthScoreHistory): Promise<HealthScoreHistory> {
   const db = await getDb();
-  const result = await db.insert(healthScoreHistory).values(data).returning();
+  const result = await db!.insert(healthScoreHistory).values(data).returning();
   return result[0];
 }
 
-export async function getLatestHealthScoreForCustomer(
+export async function createHealthScoreHistoryBatch(data: NewHealthScoreHistory[]): Promise<HealthScoreHistory[]> {
+  if (data.length === 0) return [];
+  const db = await getDb();
+  return db!.insert(healthScoreHistory).values(data).returning();
+}
+
+export async function getLatestHealthScoreSnapshot(
   customerId: number,
   userId: number
 ): Promise<HealthScoreHistory | null> {
   const db = await getDb();
-  const result = await db
+  const result = await db!
     .select()
     .from(healthScoreHistory)
-    .where(and(eq(healthScoreHistory.customerId, customerId), eq(healthScoreHistory.userId, userId)))
-    .orderBy(desc(healthScoreHistory.scoredAt))
+    .where(
+      and(
+        eq(healthScoreHistory.customerId, customerId),
+        eq(healthScoreHistory.userId, userId)
+      )
+    )
+    .orderBy(desc(healthScoreHistory.snapshotAt))
     .limit(1);
   return result[0] ?? null;
 }
 
-export async function getAverageHealthScoreByUserId(userId: number): Promise<number> {
-  const db = await getDb();
-  const result = await db
-    .select({ avg: sql<string>`coalesce(avg(${customers.healthScore}), 0)` })
-    .from(customers)
-    .where(and(eq(customers.userId, userId), eq(customers.isActive, true)));
-  return parseFloat(result[0]?.avg ?? "0");
-}
+// ---------------------------------------------------------------------------
+// Playbooks
+// ---------------------------------------------------------------------------
 
-// ─── Customer Event Helpers ───────────────────────────────────────────────────
-
-export async function getCustomerEvents(
-  customerId: number,
-  userId: number,
-  limitRows: number = 50
-): Promise<CustomerEvent[]> {
+export async function getPlaybooksByUserId(userId: number): Promise<Playbook[]> {
   const db = await getDb();
-  return db
+  return db!
     .select()
-    .from(customerEvents)
-    .where(and(eq(customerEvents.customerId, customerId), eq(customerEvents.userId, userId)))
-    .orderBy(desc(customerEvents.occurredAt))
-    .limit(limitRows);
+    .from(playbooks)
+    .where(eq(playbooks.userId, userId))
+    .orderBy(desc(playbooks.createdAt));
 }
 
-export async function getCustomerEventsByType(
-  customerId: number,
-  userId: number,
-  eventType: "login" | "feature_used" | "api_call" | "support_ticket" | "billing_event" | "custom"
-): Promise<CustomerEvent[]> {
+export async function getPlaybookById(id: number, userId: number): Promise<Playbook | null> {
   const db = await getDb();
-  return db
+  const result = await db!
     .select()
-    .from(customerEvents)
-    .where(
-      and(
-        eq(customerEvents.customerId, customerId),
-        eq(customerEvents.userId, userId),
-        eq(customerEvents.eventType, eventType)
-      )
-    )
-    .orderBy(desc(customerEvents.occurredAt));
+    .from(playbooks)
+    .where(and(eq(playbooks.id, id), eq(playbooks.userId, userId)))
+    .limit(1);
+  return result[0] ?? null;
 }
 
-export async function createCustomerEvent(data: NewCustomerEvent): Promise<CustomerEvent> {
+export async function getActivePlaybooksByUserId(userId: number): Promise<Playbook[]> {
   const db = await getDb();
-  const result = await db.insert(customerEvents).values(data).returning();
+  return db!
+    .select()
+    .from(playbooks)
+    .where(and(eq(playbooks.userId, userId), eq(playbooks.status, "active")))
+    .orderBy(asc(playbooks.name));
+}
+
+export async function createPlaybook(data: NewPlaybook): Promise<Playbook> {
+  const db = await getDb();
+  const result = await db!.insert(playbooks).values(data).returning();
   return result[0];
 }
 
-export async function createCustomerEventsBatch(data: NewCustomerEvent[]): Promise<CustomerEvent[]> {
-  if (data.length === 0) return [];
+export async function updatePlaybook(
+  id: number,
+  userId: number,
+  data: Partial<Omit<NewPlaybook, "id" | "userId" | "createdAt">>
+): Promise<Playbook | null> {
   const db = await getDb();
-  const result = await db.insert(customerEvents).values(data).returning();
-  return result;
+  const result = await db!
+    .update(playbooks)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(playbooks.id, id), eq(playbooks.userId, userId)))
+    .returning();
+  return result[0] ?? null;
 }
 
-export async function getCustomerLoginCountSince(
-  customerId: number,
-  userId: number,
-  since: Date
-): Promise<number> {
+export async function incrementPlaybookRunCount(id: number, userId: number): Promise<void> {
   const db = await getDb();
-  const result = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(customerEvents)
+  await db!
+    .update(playbooks)
+    .set({
+      runCount: sql`${playbooks.runCount} + 1`,
+      lastRunAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(playbooks.id, id), eq(playbooks.userId, userId)));
+}
+
+export async function deletePlaybook(id: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+  const result = await db!
+    .delete(playbooks)
+    .where(and(eq(playbooks.id, id), eq(playbooks.userId, userId)))
+    .returning();
+  return result.length > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Playbook Steps
+// ---------------------------------------------------------------------------
+
+export async function getPlaybookStepsByPlaybookId(
+  playbookId: number,
+  userId: number
+): Promise<PlaybookStep[]> {
+  const db = await getDb();
+  return db!
+    .select()
+    .from(playbookSteps)
     .where(
       and(
-        eq(customerEvents.customerId, customerId),
-        eq(customerEvents.userId, userId),
-        gte(customerEvents.occurredAt, since)
+        eq(playbookSteps.playbookId, playbookId),
+        eq(playbookSteps.userId, userId)
       )
     )
-    .limit(1);
-
-  return result[0]?.count ?? 0;
+    .orderBy(asc(playbookSteps.stepOrder));
 }
+
+export async function getPlaybookStepById(id: number, userId: number): Promise<PlaybookStep | null> {
+  const db = await getDb();
+  const result = await db!
+    .select()
+    .from(playbookSteps)
+    .where(and(eq(playbookSteps.id, id), eq(playbookSteps.userId, userId)))
+    .limit(1);
+  return result[0] ?? null;
+}
+
+export async function createPlaybookStep(data: NewPlaybookStep): Promise<PlaybookStep> {
+  const db = await getDb();
+  const result = await db!.insert(playbookSteps).values(data).returning();
+  return result[0];
+}
+
+export async function createPlaybookStepsBatch(data: NewPlaybookStep[]): Promise<PlaybookStep[]> {
+  if (data.length === 0) return [];
+  const db = await getDb();
+  return db!.insert(playbookSteps).values(data).returning();
+}
+
+export async function updatePlaybookStep(
+  id: number,
+  userId: number,
+  data: Partial<Omit<NewPlaybookStep, "id" | "userId" | "playbookId" | "createdAt">>
+): Promise<PlaybookStep | null> {
+  const db = await getDb();
+  const result = await db!
+    .update(playbookSteps)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(playbookSteps.id, id), eq(playbookSteps.userId, userId)))
+    .returning();
+  return result[0] ?? null;
+}
+
+export async function deletePlaybookStep(id: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+  const result = await db!
+    .delete(playbookSteps)
+    .where(and(eq(playbookSteps.id, id), eq(playbookSteps.userId, userId)))
