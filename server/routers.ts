@@ -853,4 +853,27 @@ export const appRouter = router({
         z.object({
           id: z.number(),
           ruleName: z.string().min(1).optional(),
-          description: z.string
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Integration not found' });
+        }
+        return result[0];
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        const result = await db!
+          .delete(integrations)
+          .where(
+            and(eq(integrations.id, input.id), eq(integrations.userId, ctx.user.id))
+          )
+          .returning();
+        if (!result[0]) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Integration not found' });
+        }
+        return result[0];
+      }),
+  }),
+});
+
+export type AppRouter = typeof appRouter;
