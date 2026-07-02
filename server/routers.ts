@@ -772,4 +772,50 @@ const churnRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-      const [customer]
+      const [customer] = await db
+        .select()
+        .from(customers)
+        .where(
+          and(
+            eq(customers.id, input.customerId),
+            eq(customers.userId, ctx.user.id)
+          )
+        )
+        .limit(1);
+
+      if (!customer) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
+      }
+
+      const [prediction] = await db
+        .insert(churnPredictions)
+        .values({
+          userId: ctx.user.id,
+          customerId: input.customerId,
+          riskLevel: input.riskLevel,
+          riskScore: String(input.riskScore),
+          confidence: String(input.confidence),
+          predictedChurnDate: input.predictedChurnDate ?? null,
+          primaryRiskFactor: input.primaryRiskFactor ?? null,
+          riskFactors: input.riskFactors ? JSON.stringify(input.riskFactors) : null,
+          recommendations: input.recommendations ? JSON.stringify(input.recommendations) : null,
+          modelVersion: input.modelVersion ?? "1.0",
+        })
+        .$returningId();
+
+      return { id: prediction.id };
+    }),
+});
+
+export const appRouter = router({
+  auth: router({
+    me: publicProcedure.query(({ ctx }) => ctx.user ?? null),
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      ctx.resHeaders.append("Set-Cookie", "session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax");
+      return { ok: true };
+    }),
+  }),
+  payments: paymentsRouter,
+});
+
+export type AppRouter = typeof appRouter;
