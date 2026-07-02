@@ -463,3 +463,23 @@ export default function Pricing() {
           <div className="mb-10 text-center">
             <h2 className="text-2xl font-extrabold tracking-tight md:text-3xl">
               Everything you need to retain customers
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {[
+              { icon: BarChart3, title: "Churn Analytics", desc: "Real-time dashboards showing at-risk customers, cohort analysis, and revenue impact." },
+              { icon: Bell, title: "Smart Alerts", desc: "Automated notifications when customers show warning signs before they churn." },
+              { icon: RefreshCw, title: "Retention Playbooks", desc: "Pre-built and custom workflows to automatically engage at-risk customers." },
+            ].map(({ icon: Icon, title, desc }) => (
+              <div key={title} className="rounded-xl border border-border bg-background p-6">
+                <Icon className="mb-3 h-6 w-6 text-primary" />
+                <h3 className="mb-2 font-semibold">{title}</h3>
+                <p className="text-sm text-muted-foreground">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
